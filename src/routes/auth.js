@@ -13,10 +13,23 @@ router.post("/register", async (req, res) => {
     if (existingUser) return res.status(400).json({ message: "Email đã tồn tại" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    console.log("Register request:", { name, email, role });
     const newUser = await User.create({ name, email, password: hashedPassword, role });
+    console.log("User created:", newUser);
+    // Tạo token
+    const token = jwt.sign(
+      {
+        id: newUser._id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
     const { password: pw, ...userData } = newUser._doc;
-    res.status(201).json({ message: "Đăng ký thành công", user: userData });
+    res.status(201).json({ token, user: userData, message: "Đăng ký thành công" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

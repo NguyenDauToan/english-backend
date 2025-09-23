@@ -162,18 +162,30 @@ router.post(
       const sheetName = workbook.SheetNames[0];
       const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
-      const questions = data.map(q => ({
-        content: q.Content,
-        type: q.Type || "multiple_choice",
-        options: q.Options ? q.Options.split("|") : [],
-        answer: q.Answer,
-        skill: overrideSkill || q.Skill,
-        level: overrideLevel || q.Level || "easy",
-        grade: overrideGrade || String(q.Grade),
-        explanation: q.Explanation,
-        tags: q.Tags ? q.Tags.split("|") : [],
-        createdBy: req.user._id,
-      }));
+      const validGrades = ["6","7","8","9","10","11","12"];
+
+      const questions = data.map((q, idx) => {
+        const skill = overrideSkill || q.Skill;
+        const grade = overrideGrade || String(q.Grade);
+        const level = overrideLevel || q.Level || "easy";
+
+        if (!skill) throw new Error(`Câu hỏi thứ ${idx+1} thiếu skill`);
+        if (!grade) throw new Error(`Câu hỏi thứ ${idx+1} thiếu grade`);
+        if (!validGrades.includes(grade)) throw new Error(`Câu hỏi thứ ${idx+1} grade không hợp lệ: ${grade}`);
+
+        return {
+          content: q.Content,
+          type: q.Type || "multiple_choice",
+          options: q.Options ? q.Options.split("|") : [],
+          answer: q.Answer,
+          skill,
+          level,
+          grade,
+          explanation: q.Explanation,
+          tags: q.Tags ? q.Tags.split("|") : [],
+          createdBy: req.user._id,
+        };
+      });
 
       const inserted = await Question.insertMany(questions);
       res.status(201).json({ message: `Đã thêm ${inserted.length} câu hỏi`, inserted });

@@ -40,15 +40,21 @@ router.post("/", verifyToken, verifyRole(["teacher", "admin"]), async (req, res)
 // --- Lấy tất cả bài thi ---
 router.get("/", verifyToken, async (req, res) => {
   try {
+    console.log("GET /exams called");
+    console.log("Headers:", req.headers);
+    console.log("User from token:", req.user); // kiểm tra verifyToken
     const exams = await Test.find().populate({
       path: "questions",
       select: "content type options skill grade level",
     });
+    console.log("Exams fetched:", exams.length);
     res.json(exams);
   } catch (err) {
+    console.error("Error in GET /exams:", err);
     res.status(500).json({ message: err.message });
   }
 });
+
 
 // --- Lấy 1 bài thi theo id ---
 router.get("/:id", verifyToken, async (req, res) => {
