@@ -2,7 +2,7 @@ import express from "express";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { generateJWT } from "../utils/jwt.js";
-import User from "../models/User.js";
+import User from "../models/tempUser.js";
 
 export default function createAuthGoogleRoutes() {
   const router = express.Router();
