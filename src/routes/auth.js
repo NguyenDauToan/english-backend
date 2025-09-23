@@ -1,5 +1,5 @@
 import express from "express";
-import User from "../models/user.js"; // dùng 'user' lowercase trùng import
+import User from "../models/User";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 

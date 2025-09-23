@@ -1,6 +1,6 @@
 // routes/admin.js
 import express from "express";
-import User from "../models/user.js"; // model user của bạn
+import User from "../models/User";
 
 const router = express.Router();
 
