@@ -1,5 +1,5 @@
 import express from "express";
-import User from "../models/tempUser.js";  // Model User bạn đã có
+import User from "../models/user.js";  // Model User bạn đã có
 
 const router = express.Router();
 

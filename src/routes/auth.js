@@ -1,9 +1,9 @@
-import express from "express";
-import User from "../models/tempUser.js";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+const router = (await import("express")).default.Router();
+const User = (await import("../models/user.js")).default;
+const bcrypt = (await import("bcryptjs")).default;
+const jwt = (await import("jsonwebtoken")).default;
 
-const router = express.Router();
+
 
 // ---------------- Đăng ký ----------------
 router.post("/register", async (req, res) => {

@@ -1,7 +1,7 @@
 // routes/admin.js
 import express from "express";
 import Test from "../models/test.js";
-import User from "../models/tempUser.js";
+import User from "../models/user.js";
 import Result from "../models/result.js";
 import Question from "../models/question.js";
 

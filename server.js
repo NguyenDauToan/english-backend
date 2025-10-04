@@ -1,4 +1,3 @@
-// server.js
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -8,73 +7,47 @@ import session from "express-session";
 import passport from "passport";
 import connectDB from "./src/config/db.js";
 
-// Routes
-import authRoutes from "./src/routes/auth.js";
-import questionRoutes from "./src/routes/question.js";
-import examRoutes from "./src/routes/exam.js";
-import resultRoutes from "./src/routes/result.js";
-import createAuthGoogleRoutes from "./src/routes/authGoogle.js";
-import adminRoutes from "./src/routes/admin.js";
-import adminUsersRoutes from "./src/routes/adminUsers.js";
-
-const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Connect DB
-connectDB();
+async function startServer() {
+  // ✅ Kết nối DB trước khi import route/model
+  await connectDB();
 
-// ✅ CORS configuration
-const allowedOrigins = [
-  "http://localhost:8080",
-  "http://localhost:5173",
-  "https://nguyendautoan.github.io"
-];
+  const app = express();
 
-app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin) return callback(null, true); // Postman / server-side
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-  credentials: true, // quan trọng nếu dùng cookie/session
-  methods: ["GET", "POST", "PUT", "DELETE"]
-}));
+  // Middleware
+  app.use(express.json());
+  app.use(cors({ origin: "*", credentials: true }));
 
-// Middleware
-app.use(express.json());
+  app.use(session({
+    secret: "secretkey",
+    resave: false,
+    saveUninitialized: false,
+  }));
 
-// Session + passport
-app.use(session({
-  secret: "secretkey",
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === "production", // HTTPS mới gửi cookie
-    httpOnly: true,
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
-  }
-}));
+  app.use(passport.initialize());
+  app.use(passport.session());
 
-app.use(passport.initialize());
-app.use(passport.session());
+  // ✅ Import route sau khi DB đã connect
+  const authRoutes = (await import("./src/routes/auth.js")).default;
+  const questionRoutes = (await import("./src/routes/question.js")).default;
+  const examRoutes = (await import("./src/routes/exam.js")).default;
+  const resultRoutes = (await import("./src/routes/result.js")).default;
+  const createAuthGoogleRoutes = (await import("./src/routes/authGoogle.js")).default;
+  const adminRoutes = (await import("./src/routes/admin.js")).default;
+  const adminUsersRoutes = (await import("./src/routes/adminUsers.js")).default;
 
-// Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/questions", questionRoutes);
-app.use("/api/exams", examRoutes);
-app.use("/api/results", resultRoutes);
-app.use("/api/auth/google", createAuthGoogleRoutes());
-app.use("/api/admin", adminRoutes);
-app.use("/api/admin/users", adminUsersRoutes);
+  app.use("/api/auth", authRoutes);
+  app.use("/api/questions", questionRoutes);
+  app.use("/api/exams", examRoutes);
+  app.use("/api/results", resultRoutes);
+  app.use("/api/auth/google", createAuthGoogleRoutes());
+  app.use("/api/admin", adminRoutes);
+  app.use("/api/admin/users", adminUsersRoutes);
 
-// Test
-app.get("/", (req, res) => {
-  res.send("Hello, English Exam System!");
-});
+  app.get("/", (req, res) => res.send("Hello, English Exam System!"));
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
-});
+  app.listen(PORT, () => console.log(`🚀 Server running at http://localhost:${PORT}`));
+}
+
+startServer();

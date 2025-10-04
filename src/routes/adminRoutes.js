@@ -1,6 +1,6 @@
 // routes/admin.js
 import express from "express";
-import User from "../models/tempUser.js";
+import User from "../models/user.js";
 
 const router = express.Router();
 

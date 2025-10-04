@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import User from "../models/tempUser.js";
+import User from "../models/user.js";
 
 export const verifyToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
