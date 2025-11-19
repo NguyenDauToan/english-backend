@@ -2,6 +2,7 @@ import express from "express";
 import User from "../models/user.js";  // Model User bạn đã có
 
 const router = express.Router();
+export const onlineUsers = new Map(); // userId => true
 
 // Lấy danh sách tài khoản
 router.get("/", async (req, res) => {
@@ -61,6 +62,23 @@ router.delete("/:id", async (req, res) => {
     res.json({ message: "Xóa tài khoản thành công" });
   } catch (error) {
     res.status(500).json({ message: "Lỗi khi xóa tài khoản" });
+  }
+});
+// PUT /api/admin/users/:id/active
+router.put("/:id/active", async (req, res) => {
+  try {
+    const { isActive } = req.body;
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { isActive },
+      { new: true }
+    ).select("-password");
+
+    if (!user) return res.status(404).json({ message: "Không tìm thấy tài khoản" });
+
+    res.json(user); // trả về user mới đã update
+  } catch (error) {
+    res.status(500).json({ message: "Lỗi khi cập nhật trạng thái" });
   }
 });
 

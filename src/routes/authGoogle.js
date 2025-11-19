@@ -43,9 +43,21 @@ export default function createAuthGoogleRoutes() {
     "/callback",
     passport.authenticate("google", { session: false, failureRedirect: "/" }),
     (req, res) => {
-      const token = generateJWT(req.user);
-      const user = { id: req.user._id, name: req.user.name, email: req.user.email, role: req.user.role };
-
+      const userDoc = req.user;
+  
+      // ✅ Kiểm tra tài khoản có bị chặn không
+      if (!userDoc.isActive) {
+        return res.send(`
+          <script>
+            window.opener.postMessage({ error: "Tài khoản của bạn đã bị chặn." }, "http://localhost:8080");
+            window.close();
+          </script>
+        `);
+      } 
+  
+      const token = generateJWT(userDoc);
+      const user = { id: userDoc._id, name: userDoc.name, email: userDoc.email, role: userDoc.role, isActive: userDoc.isActive };
+  
       // gửi token + user về frontend popup
       res.send(`
         <script>
@@ -55,6 +67,7 @@ export default function createAuthGoogleRoutes() {
       `);
     }
   );
+  
 
   return router;
 }

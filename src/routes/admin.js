@@ -1,62 +1,99 @@
-// routes/admin.js
+// src/routes/admin.js
 import express from "express";
 import Test from "../models/test.js";
 import User from "../models/user.js";
 import Result from "../models/result.js";
 import Question from "../models/question.js";
+import Feedback from "../models/feedback.js";
 
 const router = express.Router();
 
 // GET /api/admin/dashboard
 router.get("/dashboard", async (req, res) => {
   try {
-    // Tổng số học viên (role = student)
     const totalUsers = await User.countDocuments({ role: "student" });
-
-    // Tổng số đề thi
     const totalTests = await Test.countDocuments();
-
-    // Tổng số câu hỏi
     const totalQuestions = await Question.countDocuments();
-
-    // Kết quả thi
     const totalResults = await Result.countDocuments();
+
     const avgScoreAgg = await Result.aggregate([
       { $match: { score: { $ne: null } } },
-      { $group: { _id: null, avgScore: { $avg: "$score" } } }
+      { $group: { _id: null, avgScore: { $avg: "$score" } } },
     ]);
-    const avgScore = avgScoreAgg.length > 0 ? avgScoreAgg[0].avgScore.toFixed(1) : 0;
+    const avgScore =
+      avgScoreAgg.length > 0 ? avgScoreAgg[0].avgScore.toFixed(1) : 0;
 
-    // Tỷ lệ hoàn thành (nếu 1 result có đủ answers thì coi là hoàn thành)
-    const completedExams = await Result.countDocuments({ "answers.0": { $exists: true } });
+    const completedExams = await Result.countDocuments({
+      "answers.0": { $exists: true },
+    });
     const completionRate =
-      totalResults > 0 ? ((completedExams / totalResults) * 100).toFixed(1) + "%" : "0%";
+      totalResults > 0
+        ? ((completedExams / totalResults) * 100).toFixed(1) + "%"
+        : "0%";
 
-    // Hoạt động gần đây (lấy từ Result + User + Test thật)
     const activities = await Result.find()
       .sort({ createdAt: -1 })
       .limit(5)
-      .populate("studentId", "name")
-      .populate("testId", "title")
+      .populate("user", "name")
+      .populate("test", "title")
       .lean();
 
     const recentActivities = activities.map((r) => ({
-      action: `Hoàn thành bài thi ${r.testId?.title || "N/A"}`,
-      user: r.studentId?.name || "Unknown",
+      action: `Hoàn thành bài thi ${r.test?.title || "N/A"}`,
+      user: r.user?.name || "Unknown",
       time: r.createdAt,
     }));
 
-    // Thống kê nhanh
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const examsToday = await Result.countDocuments({
+      createdAt: { $gte: todayStart },
+    });
+
+    const last7Days = new Date();
+    last7Days.setDate(last7Days.getDate() - 7);
+
+    const newUsersThisWeek = await User.countDocuments({
+      role: "student",
+      createdAt: { $gte: last7Days },
+    });
+
+    const newTestsThisWeek = await Test.countDocuments({
+      createdAt: { $gte: last7Days },
+    });
+
+    const pendingFeedbacks = await Feedback.countDocuments({
+      status: "pending",
+    });
+
+    let onlineUserList = [];
+    let onlineUsers = 0;
+    if (User.schema.paths.lastActive) {
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const onlineStudents = await User.find({
+        role: "student",
+        lastActive: { $gte: fiveMinutesAgo },
+      }).select("_id name email role lastActive");
+
+      onlineUserList = Array.from(
+        new Map(onlineStudents.map((u) => [u._id.toString(), u])).values()
+      );
+      onlineUsers = onlineUserList.length;
+    }
+
     const quickStats = {
-      examsToday: await Result.countDocuments({
-        createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) },
-      }),
-      newUsersThisWeek: await User.countDocuments({
-        createdAt: { $gte: new Date(new Date().setDate(new Date().getDate() - 7)) },
-      }),
-      newTestsThisWeek: await Test.countDocuments({
-        createdAt: { $gte: new Date(new Date().setDate(new Date().getDate() - 7)) },
-      }),
+      examsToday,
+      onlineUsers,
+      onlineUserList,
+      newUsersThisWeek,
+      newTestsThisWeek,
+      pendingFeedbacks,
+
+      // thêm 4 field để FE dùng cho StatTile
+      totalUsers,
+      totalTests,
+      totalResults,
       totalQuestions,
     };
 
