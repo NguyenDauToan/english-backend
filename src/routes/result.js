@@ -243,28 +243,44 @@ router.post("/", verifyToken, verifyRole(["student"]), async (req, res) => {
     res.status(500).json({ message: "Lỗi server khi lưu kết quả" });
   }
 });
+router.get(
+  "/me",
+  verifyToken,
+  verifyRole(["student"]),
+  async (req, res) => {
+    try {
+      const results = await Result.find({ user: req.user._id })
+        .populate("test", "title duration")
+        .populate("mockExam", "name officialName examType grade year duration")
+        .sort({ createdAt: -1 });
 
-// ============================
-// (Nếu cần) GET /api/results/me
-// Lấy các kết quả của chính học sinh
-// ============================
-// router.get("/me", verifyToken, verifyRole(["student"]), async (req, res) => {
-//   try {
-//     const results = await Result.find({ user: req.user._id })
-//       .populate("test", "title duration")
-//       .populate("mockExam", "name officialName examType grade year duration")
-//       .sort({ createdAt: -1 });
-//     res.json(results);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Lỗi server khi lấy kết quả cá nhân" });
-//   }
-// });
+      // Format lại đúng với interface Result bên FE
+      const formatted = results.map((r) => ({
+        _id: r._id,
+        test: r.test || null,
+        mockExam: r.mockExam || null,
+        score: r.score ?? 0,
+        timeSpent: r.timeSpent ?? 0,
+        finishedAt: r.createdAt,
+        details: Array.isArray(r.details)
+          ? r.details.map((d) => ({
+              skill: d.skill,
+              score: d.score,
+              total: d.total,
+              accuracy: d.accuracy,
+            }))
+          : [],
+      }));
 
-// ============================
-// GET /api/results/user/:userId
-// Teacher/Admin xem kết quả học sinh khác
-// ============================
+      res.json(formatted);
+    } catch (err) {
+      console.error(err);
+      res
+        .status(500)
+        .json({ message: "Lỗi server khi lấy kết quả cá nhân" });
+    }
+  }
+);
 router.get(
   "/user/:userId",
   verifyToken,
