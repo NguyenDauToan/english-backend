@@ -2,7 +2,7 @@ const allowedOrigins = [
   "http://localhost:8080",
   "http://localhost:5173",
   "https://nguyendautoan.github.io",
-  "https://datn-ebon-eight.vercel.app/"
+  "https://datn-ebon-eight.vercel.app"
 ];
 
 app.use(cors({
