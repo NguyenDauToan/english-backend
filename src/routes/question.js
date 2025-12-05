@@ -4,12 +4,74 @@ import { verifyToken, verifyRole } from "../middleware/auth.js";
 import XLSX from "xlsx";
 import multer from "multer";
 import Test from "../models/test.js";
+import fs from "fs";
+import path from "path";
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 const EXAM_GRADES = ["thptqg", "ielts", "toeic", "vstep"];
 
+const audioStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = "uploads/audio";
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    // Đổi tên tránh trùng
+    const ext = path.extname(file.originalname); // .mp3, .wav
+    const base = path.basename(file.originalname, ext);
+    const safeBase = base.replace(/\s+/g, "_");
+    cb(null, `${safeBase}-${Date.now()}${ext}`);
+  },
+});
+
+const audioUpload = multer({
+  storage: audioStorage,
+  limits: { fileSize: 20 * 1024 * 1024 }, // max 20MB
+  fileFilter: (req, file, cb) => {
+    const allowed = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav"];
+    if (!allowed.includes(file.mimetype)) {
+      return cb(new Error("Chỉ chấp nhận file audio mp3 / wav"));
+    }
+    cb(null, true);
+  },
+});
+
+// ============================
+// POST /api/questions/upload-audio
+// Upload file audio cho câu listening -> trả về audioUrl
+// ============================
+router.post(
+  "/upload-audio",
+  verifyToken,
+  verifyRole(["teacher", "admin"]),
+  audioUpload.single("audio"),
+  (req, res) => {
+    try {
+      if (!req.file) {
+        return res
+          .status(400)
+          .json({ message: "Vui lòng chọn file audio (mp3 / wav)" });
+      }
+
+      // app.use("/uploads", express.static("uploads")) ở server chính
+      const audioUrl = `/uploads/audio/${req.file.filename}`;
+
+      res.status(201).json({
+        message: "Upload audio thành công",
+        audioUrl,
+        fileName: req.file.originalname,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: "Lỗi server khi upload audio" });
+    }
+  }
+);
 // ========== BULK (giữ nguyên) ==========
 router.post(
   "/bulk",
@@ -30,6 +92,7 @@ router.post(
 );
 
 // ========== TẠO CÂU HỎI ==========
+
 router.post(
   "/",
   verifyToken,
@@ -46,35 +109,63 @@ router.post(
         grade,
         explanation,
         tags,
-        subQuestions, // thêm cho reading_cloze
+        subQuestions,
+        audioUrl,
       } = req.body;
 
       if (!content || !type || !skill || !grade) {
         return res.status(400).json({ message: "Thiếu dữ liệu bắt buộc" });
       }
 
-      // các type bình thường: bắt buộc có answer
-      if (
-        ["multiple_choice", "fill_blank", "true_false"].includes(type) &&
-        !answer
-      ) {
+      // các type thường (có thể tự chấm)
+      const SIMPLE_TYPES_REQUIRE_ANSWER = [
+        "multiple_choice",
+        "fill_blank",
+        "true_false",
+        "writing_sentence_order",
+        "writing_add_words",
+      ];
+
+      // ----- XỬ LÝ RIÊNG SPEAKING Luyện Đọc -----
+      // Nếu skill = speaking => ép type = "speaking" và
+      // nếu không gửi answer thì dùng luôn content làm đáp án chuẩn (đoạn văn HS phải đọc)
+      let finalType = type;
+      let finalAnswer = answer;
+
+      if (skill === "speaking") {
+        finalType = "speaking";
+        if (!finalAnswer) {
+          finalAnswer = content; // đoạn văn chuẩn để AI dùng làm mẫu so sánh
+        }
+      }
+
+      if (SIMPLE_TYPES_REQUIRE_ANSWER.includes(finalType) && !finalAnswer) {
         return res
           .status(400)
           .json({ message: "Câu hỏi dạng thường phải có đáp án answer" });
       }
 
-      // type đặc biệt: reading_cloze – chỉ dùng cho thptqg / ielts / toeic / vstep
-      if (type === "reading_cloze") {
-        if (!EXAM_GRADES.includes(grade)) {
+      // 🔹 type đặc biệt: reading_cloze (xài chung cho Reading & Listening)
+      if (finalType === "reading_cloze") {
+        // Reading cloze vẫn chỉ cho các kỳ thi lớn
+        if (skill === "reading" && !EXAM_GRADES.includes(grade)) {
           return res.status(400).json({
             message:
-              "reading_cloze chỉ áp dụng cho các kỳ thi: thptqg / ielts / toeic / vstep",
+              "Reading cloze chỉ áp dụng cho các kỳ thi: thptqg / ielts / toeic / vstep",
           });
+        }
+
+        // Listening cloze: cho phép mọi grade, nhưng phải có audio
+        if (skill === "listening" && !audioUrl) {
+          return res
+            .status(400)
+            .json({ message: "Listening cloze phải có audioUrl" });
         }
 
         if (!Array.isArray(subQuestions) || subQuestions.length === 0) {
           return res.status(400).json({
-            message: "Reading cloze phải có ít nhất 1 câu con (subQuestions)",
+            message:
+              "Reading/Listening cloze phải có ít nhất 1 câu con (subQuestions)",
           });
         }
 
@@ -96,8 +187,8 @@ router.post(
       }
 
       const question = await Question.create({
-        content,
-        type,
+        content,             // với speaking: nội dung hiển thị (có thể là chính đoạn văn hoặc 1 prompt + đoạn văn)
+        type: finalType,
         skill,
         level,
         grade,
@@ -105,12 +196,13 @@ router.post(
         tags,
         createdBy: req.user._id,
 
-        // chỉ set options/answer cho type thường
-        options: type === "reading_cloze" ? undefined : options,
-        answer: type === "reading_cloze" ? undefined : answer,
+        // chỉ câu đơn mới có options/answer
+        options: finalType === "reading_cloze" ? undefined : options,
+        answer: finalType === "reading_cloze" ? undefined : finalAnswer,
 
-        // chỉ set subQuestions cho reading_cloze
-        subQuestions: type === "reading_cloze" ? subQuestions : undefined,
+        // group question
+        subQuestions: finalType === "reading_cloze" ? subQuestions : undefined,
+        audioUrl: finalType === "reading_cloze" ? audioUrl : undefined,
       });
 
       res.status(201).json(question);
@@ -120,6 +212,7 @@ router.post(
     }
   }
 );
+
 
 // ========== GET /, /filter, /random, PUT, DELETE giữ nguyên ==========
 
@@ -308,7 +401,20 @@ router.post(
         const skill = overrideSkill || q.Skill;
         const grade = overrideGrade || String(q.Grade);
         const level = overrideLevel || q.Level || "easy";
-
+        const allowedTypes = [
+          "multiple_choice",
+          "fill_blank",
+          "true_false",
+          "reading_cloze",
+          "writing_sentence_order",
+          "writing_paragraph",
+          "writing_add_words",
+          "speaking",
+        ];
+        
+        const rawType = q.Type || "multiple_choice";
+        const type = allowedTypes.includes(rawType) ? rawType : "multiple_choice";
+        
         if (!skill) throw new Error(`Câu hỏi thứ ${idx + 1} thiếu skill`);
         if (!grade) throw new Error(`Câu hỏi thứ ${idx + 1} thiếu grade`);
         if (!validGrades.includes(grade))
@@ -316,18 +422,18 @@ router.post(
             `Câu hỏi thứ ${idx + 1} grade không hợp lệ: ${grade}`
           );
 
-        return {
-          content: q.Content,
-          type: q.Type || "multiple_choice",
-          options: q.Options ? q.Options.split("|") : [],
-          answer: q.Answer,
-          skill,
-          level,
-          grade,
-          explanation: q.Explanation,
-          tags: q.Tags ? q.Tags.split("|") : [],
-          createdBy: req.user._id,
-        };
+          return {
+            content: q.Content,
+            type,
+            options: q.Options ? q.Options.split("|") : [],
+            answer: q.Answer,
+            skill,
+            level,
+            grade,
+            explanation: q.Explanation,
+            tags: q.Tags ? q.Tags.split("|") : [],
+            createdBy: req.user._id,
+          };          
       });
 
       const inserted = await Question.insertMany(questions);

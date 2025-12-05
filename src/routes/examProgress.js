@@ -1,5 +1,6 @@
 // src/routes/examProgress.js
 import express from "express";
+import mongoose from "mongoose";
 import ExamProgress from "../models/examProgress.js";
 import { verifyToken, verifyRole } from "../middleware/auth.js";
 
@@ -20,16 +21,18 @@ router.post("/save", verifyToken, verifyRole(["student"]), async (req, res) => {
       ...(testId ? { test: testId } : { mockExam: mockExamId }),
     };
 
+    // gắn thêm thông tin lớp / trường hiện tại của user
     const update = {
       ...query,
       answers: answers || [],
       currentIndex: currentIndex ?? 0,
       timeUsed: timeUsed ?? 0,
       timeLeft: timeLeft ?? 0,
+      school: req.user.school || undefined,
+      classroom: req.user.classroom || undefined,
     };
 
-    // thêm log để chắc chắn route đang chạy
-    console.log("SAVE exam-progress", query);
+    console.log("SAVE exam-progress", query, "with class", req.user.classroom);
 
     const progress = await ExamProgress.findOneAndUpdate(query, update, {
       new: true,
@@ -85,10 +88,24 @@ router.get(
   }
 );
 
-// Danh sách tất cả bài đang làm dở của user (nếu sau này cần)
+// Danh sách tất cả bài đang làm dở của user (lọc theo lớp hiện tại nếu có)
 router.get("/me", verifyToken, verifyRole(["student"]), async (req, res) => {
   try {
-    const progresses = await ExamProgress.find({ user: req.user._id })
+    const rawUserId = String(req.user._id || req.user.id);
+    const userId = new mongoose.Types.ObjectId(rawUserId);
+
+    const query = { user: userId };
+
+    // nếu user hiện tại đang thuộc lớp nào thì chỉ lấy progress của lớp đó
+    if (req.user.classroom) {
+      query.classroom = new mongoose.Types.ObjectId(
+        String(req.user.classroom)
+      );
+    }
+
+    console.log("LOAD exam-progress /me with filter:", query);
+
+    const progresses = await ExamProgress.find(query)
       .populate("test", "title duration skill")
       .populate("mockExam", "name duration examType")
       .sort({ updatedAt: -1 });

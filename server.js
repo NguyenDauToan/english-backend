@@ -24,6 +24,11 @@ import mockExamRoutes from "./src/routes/mockExam.js";
 import mockExamPaperRoutes from "./src/routes/mockExamPaper.js";
 import examProgressRoutes from "./src/routes/examProgress.js";
 import chatSupportRoutes from "./src/routes/chatSupport.js";
+import speakingAttemptRoutes from "./src/routes/speakingAttempt.js";
+import adminClassroomsRoutes from "./src/routes/adminClassrooms.js";
+import adminSchoolYears from "./src/routes/adminSchoolYears.js";
+import profileRoutes from "./src/routes/profile.js";
+import teacherRequestRoutes from "./src/routes/teacherRequests.js";
 
 const PORT = process.env.PORT || 5000;
 
@@ -71,6 +76,8 @@ async function startServer() {
   const adminRoutes = (await import("./src/routes/admin.js")).default;
   const adminUsersRoutes = (await import("./src/routes/adminUsers.js")).default;
   const statsRoutes = (await import("./src/routes/stats.js")).default;
+  const adminClassroomsRoutes = (await import("./src/routes/adminClassrooms.js")).default;
+
   const updateLastActivity = async (req, res, next) => {
     try {
       if (req.user) {
@@ -88,8 +95,8 @@ async function startServer() {
   app.use("/api/exams", verifyToken, updateLastActivity, examRoutes);
   app.use("/api/results", resultRoutes);
   app.use("/api/auth/google", createAuthGoogleRoutes());
-  app.use("/api/admin/users", verifyToken, updateLastActivity, verifyRole(["admin"]), adminUsersRoutes);
-  app.use("/api/admin", verifyToken, updateLastActivity, verifyRole(["admin"]), adminRoutes);
+  app.use("/api/admin/users", verifyToken, updateLastActivity, adminUsersRoutes);
+  app.use("/api/admin" , adminRoutes);
   app.use("/api/ai", aiRoutes);
   app.use("/api/exam-ai", examAIRoutes);
   app.use("/api/skills", skillRoutes);
@@ -101,6 +108,18 @@ async function startServer() {
   app.use("/api/mock-exam-papers", mockExamPaperRoutes);
   app.use("/api/exam-progress", examProgressRoutes);
   app.use("/api/chat", chatSupportRoutes);
+  app.use("/api/speaking-attempts", speakingAttemptRoutes);
+  app.use("/api/profile", profileRoutes);
+  app.use("/api/admin/school-years", adminSchoolYears);
+  app.use("/api/teacher-requests", teacherRequestRoutes);
+
+  // quản lý lớp: cho admin và school_manager
+  // 👇 quản lý lớp: cho admin và school_manager
+  app.use(
+    "/api/admin/classrooms",
+    adminClassroomsRoutes
+  );
+
 
   app.use((req, res, next) => {
     res.set("Cache-Control", "no-store");
@@ -120,59 +139,74 @@ async function startServer() {
   io.on("connection", (socket) => {
     console.log("🟢 Client connected:", socket.id);
   
-    // CHAT HỎI GIÁO VIÊN (nếu bạn còn dùng)
-    socket.on("send_message", (data) => {
-      console.log("📩 New message:", data);
-      io.emit("receive_message", data);
+    // client tự join theo userId (FE đang gọi s.emit("join_user", userId))
+    socket.on("join_user", (userId) => {
+      if (!userId) return;
+      const roomId = String(userId);
+      socket.join(roomId);
+      console.log("✅ join_user room:", roomId, "socket:", socket.id);
     });
   
-    // ONLINE USERS (ADMIN) + PHÂN QUYỀN SOCKET
+    // CHAT HỎI GIÁO VIÊN (nếu chỉ dùng realtime cho admin thì có thể giữ/hoặc bỏ)
+    socket.on("send_message", (data) => {
+      console.log("📩 New message:", data);
+      // nếu không muốn broadcast hết, có thể bỏ io.emit ở đây
+      // io.emit("receive_message", data);
+    });
+  
     const { token } = socket.handshake.query;
   
     if (token && typeof token === "string") {
       const decoded = verifyTokenSocket(token);
   
       if (!decoded) {
-        console.log("❌ Token socket không hợp lệ, disconnect");
-        socket.disconnect();
-        return;
-      }
+        console.log("❌ Token socket không hợp lệ, vẫn cho giữ kết nối nhưng không auto-join room từ token");
+        // nếu muốn vẫn disconnect thì giữ nguyên:
+        // socket.disconnect();
+        // return;
+      } else {
+        const userId = String(decoded.id || decoded._id || decoded.userId);
+        const role = decoded.role;
   
-      const userId = String(decoded.id || decoded._id || decoded.userId);
-      const role = decoded.role;
+        socket.join(userId);
+        console.log("✅ Auto join room from token:", userId, "socket:", socket.id);
   
-      // Lưu onlineUsers
-      onlineUsers.set(userId, socket.id);
+        if (role === "teacher" || role === "admin") {
+          socket.join("teachers");
+          console.log(`👨‍🏫 User ${userId} (${role}) joined room "teachers"`);
+        }
   
-      // Học sinh: join room theo userId (để feedback.js: io.to(userId).emit)
-      socket.join(userId);
+        if (role === "admin" || role === "school_manager") {
+          socket.join("exam-moderators");
+          console.log(
+            `✅ User ${userId} (${role}) joined room "exam-moderators"`
+          );
+        }
   
-      // 🟢 GIÁO VIÊN / ADMIN: join room "teachers"
-      if (role === "teacher" || role === "admin") {
-        socket.join("teachers");
-        console.log(`👨‍🏫 User ${userId} (${role}) joined room "teachers"`);
-      }
+        // ONLINE USERS (giữ nguyên)
+        onlineUsers.set(userId, socket.id);
   
-      const sendOnlineUsers = async () => {
-        const allUsers = await User.find();
-        const data = allUsers.map((u) => ({
-          _id: u._id,
-          name: u.name,
-          email: u.email,
-          role: u.role,
-          isOnline: onlineUsers.has(u._id.toString()),
-          lastActivity: u.lastActivity,
-        }));
-        io.emit("update_users", data);
-      };
+        const sendOnlineUsers = async () => {
+          const allUsers = await User.find();
+          const data = allUsers.map((u) => ({
+            _id: u._id,
+            name: u.name,
+            email: u.email,
+            role: u.role,
+            isOnline: onlineUsers.has(u._id.toString()),
+            lastActivity: u.lastActivity,
+          }));
+          io.emit("update_users", data);
+        };
   
-      sendOnlineUsers();
-  
-      socket.on("disconnect", () => {
-        console.log("🔴 Client disconnected:", socket.id);
-        onlineUsers.delete(userId);
         sendOnlineUsers();
-      });
+  
+        socket.on("disconnect", () => {
+          console.log("🔴 Client disconnected:", socket.id);
+          onlineUsers.delete(userId);
+          sendOnlineUsers();
+        });
+      }
     } else {
       socket.on("disconnect", () => {
         console.log("🔴 Client disconnected (no token):", socket.id);

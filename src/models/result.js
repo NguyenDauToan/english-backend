@@ -1,11 +1,13 @@
 // src/models/result.js
 import mongoose from "mongoose";
 
-const AnswerSchema = new mongoose.Schema(
+const { Schema } = mongoose;
+
+const AnswerSchema = new Schema(
   {
     // id câu hỏi gốc
     question: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Schema.Types.ObjectId,
       ref: "Question",
       required: true,
     },
@@ -29,7 +31,7 @@ const AnswerSchema = new mongoose.Schema(
   { _id: false }
 );
 
-const DetailSchema = new mongoose.Schema(
+const DetailSchema = new Schema(
   {
     skill: { type: String, default: "" },
     score: { type: Number, default: 0 },
@@ -39,26 +41,42 @@ const DetailSchema = new mongoose.Schema(
   { _id: false }
 );
 
-const ResultSchema = new mongoose.Schema(
+const ResultSchema = new Schema(
   {
     user: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
 
     // bài test thường
     test: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Schema.Types.ObjectId,
       ref: "Test",
       default: null,
     },
 
     // đề thi thử / THPTQG
     mockExam: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Schema.Types.ObjectId,
       ref: "MockExam",
       default: null,
+    },
+
+    // ➕ trường mà kết quả này thuộc về
+    school: {
+      type: Schema.Types.ObjectId,
+      ref: "School",
+      default: null,
+      index: true,
+    },
+
+    // ➕ lớp mà kết quả này thuộc về (nếu có)
+    classroom: {
+      type: Schema.Types.ObjectId,
+      ref: "Classroom",
+      default: null,
+      index: true,
     },
 
     // điểm thang 10

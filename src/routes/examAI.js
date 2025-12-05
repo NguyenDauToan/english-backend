@@ -2,11 +2,12 @@ import express from "express";
 import Test from "../models/test.js";
 import Question from "../models/question.js";
 import { verifyToken, verifyRole } from "../middleware/auth.js";
-
+import User from "../models/user.js";                 // ➕ THÊM
+import { sendNewExamEmail } from "../utils/mailer.js";
 const router = express.Router();
 
 // POST /api/exam-ai/create → chỉ chọn câu hỏi, KHÔNG lưu DB
-router.post("/create", verifyToken, verifyRole(["teacher", "admin"]), async (req, res) => {
+router.post("/create", verifyToken, verifyRole(["teacher", "admin","school_manager"]), async (req, res) => {
   try {
     const { grade, skill, level, numQuestions = 10 } = req.body;
     if (!grade || !skill || !numQuestions) {
@@ -68,27 +69,72 @@ router.post("/create", verifyToken, verifyRole(["teacher", "admin"]), async (req
 
 
 // POST /api/exam-ai/save → lưu thật vào DB
-router.post("/save", verifyToken, verifyRole(["teacher", "admin"]), async (req, res) => {
-  try {
-    const { title, grade, skill, level, duration, questions } = req.body;
-    if (!questions?.length) return res.status(400).json({ message: "Chưa có câu hỏi để lưu" });
+router.post(
+  "/save",
+  verifyToken,
+  verifyRole(["teacher", "admin"]),
+  async (req, res) => {
+    try {
+      const { title, grade, skill, level, duration, questions } = req.body;
+      if (!questions?.length) {
+        return res
+          .status(400)
+          .json({ message: "Chưa có câu hỏi để lưu" });
+      }
 
-    const exam = await Test.create({
-      title: title || `Đề thi lớp ${grade} - ${skill}`,
-      grade,
-      skill,
-      level,
-      duration,
-      questions,
-      totalQuestions: questions.length,
-      createdBy: req.user._id,
-    });
+      const exam = await Test.create({
+        title: title || `Đề thi lớp ${grade} - ${skill}`,
+        grade,
+        skill,
+        level,
+        duration,
+        questions,
+        totalQuestions: questions.length,
+        createdBy: req.user._id,
+      });
 
-    res.status(201).json({ message: "Đề thi đã lưu", exam });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Lỗi khi lưu đề thi" });
+      // ➕ GỬI MAIL THÔNG BÁO CHO HỌC SINH
+      try {
+        // 1) Gửi cho TẤT CẢ học sinh
+        const studentFilter =  { role: "student" };
+
+        // Nếu bạn chắc chắn users.grade trùng format với exam.grade
+        // thì mới bật filter này, còn không thì để comment:
+        // if (grade) studentFilter.grade = grade;
+
+        const students = await User.find(studentFilter).select("email name");
+
+        console.log("Số học sinh sẽ gửi mail:", students.length);
+
+        const examLink = process.env.CLIENT_URL
+          ? `${process.env.CLIENT_URL}/student/exams/${exam._id}`
+          : "";
+
+        await Promise.all(
+          students
+            .filter((s) => !!s.email)
+            .map((s) =>
+              sendNewExamEmail({
+                to: s.email,
+                studentName: s.name || "bạn",
+                examTitle: exam.title,
+                duration: exam.duration,
+                examLink,
+              })
+            )
+        );
+      } catch (mailErr) {
+        console.error("Lỗi gửi mail thông báo đề thi AI mới:", mailErr);
+        // KHÔNG throw để không làm hỏng API tạo đề thi
+      }
+
+      res.status(201).json({ message: "Đề thi đã lưu", exam });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: "Lỗi khi lưu đề thi" });
+    }
   }
-});
+);
+
 
 export default router;

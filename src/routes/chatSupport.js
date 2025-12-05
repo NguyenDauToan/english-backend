@@ -1,16 +1,23 @@
 // src/routes/chatSupport.js
 import express from "express";
-import OpenAI from "openai";
+// ❌ Bỏ OpenAI
+// import OpenAI from "openai";
+
 import { verifyToken } from "../middleware/auth.js";
 import Test from "../models/test.js";
 import MockExam from "../models/mockExam.js";
 
-const router = express.Router();
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// ✅ Dùng Ollama
+import ollama from "ollama";
 
-// -----------------------------------------------------
-// 1. Hàm detect xin đáp án đề thi
-// -----------------------------------------------------
+const router = express.Router();
+
+// Tên model có thể cấu hình qua env, mặc định dùng llama3.2 (ví dụ)
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.2";
+
+/* -----------------------------------------------------
+ * 1. Hàm detect xin đáp án đề thi
+ * --------------------------------------------------- */
 function isAskingForAnswer(text = "") {
   const lower = text.toLowerCase();
 
@@ -23,28 +30,23 @@ function isAskingForAnswer(text = "") {
     lower.includes("giải chi tiết") ||
     lower.includes("hướng dẫn làm từng câu");
 
-  // Pattern kiểu: "câu 1 là gì", "câu 3 chọn đáp án nào", ...
   const regexQuestionNumber =
     /(câu\s*\d+\s*(là gì|đáp án|chọn|đúng|sai|a|b|c|d))/i;
 
   return hasAnswerKeywords || regexQuestionNumber.test(lower);
 }
 
-// -----------------------------------------------------
-// 2. Hàm detect câu hỏi ngoài phạm vi hệ thống
-//    (hỏi không liên quan tới luyện thi / hệ thống)
-// -----------------------------------------------------
+/* -----------------------------------------------------
+ * 2. Hàm detect câu hỏi ngoài phạm vi hệ thống
+ * --------------------------------------------------- */
 function isOutOfScope(text = "") {
   const lower = text.toLowerCase();
 
   const allowedKeywords = [
-    // tài khoản / đăng nhập
     "tài khoản",
     "đăng ký",
     "đăng nhập",
     "quên mật khẩu",
-
-    // chức năng hệ thống
     "hệ thống luyện thi",
     "giao diện",
     "bị lỗi",
@@ -52,8 +54,6 @@ function isOutOfScope(text = "") {
     "lỗi hệ thống",
     "không làm được bài",
     "không nộp được bài",
-
-    // luyện thi & đề thi
     "luyện thi",
     "làm đề",
     "đề thi",
@@ -64,22 +64,16 @@ function isOutOfScope(text = "") {
     "nộp bài",
     "thi thử",
     "mock exam",
-
-    // kỹ năng
     "listening",
     "reading",
     "speaking",
     "writing",
-
-    // thi thpt quốc gia (nhiều cách viết)
     "thptqg",
     "thpt qg",
     "thpt quốc gia",
     "thi thpt",
     "thi tốt nghiệp",
     "thi quốc gia",
-
-    // năm đề
     "2023",
     "2024",
     "2025",
@@ -91,13 +85,12 @@ function isOutOfScope(text = "") {
   ];
 
   const hasAllowed = allowedKeywords.some((kw) => lower.includes(kw));
-  // Nếu không chứa từ khóa nào liên quan → ngoài phạm vi
   return !hasAllowed;
 }
 
-// -----------------------------------------------------
-// 3. Route /api/chat/support
-// -----------------------------------------------------
+/* -----------------------------------------------------
+ * 3. Route /api/chat/support (dùng Ollama)
+ * --------------------------------------------------- */
 router.post("/support", verifyToken, async (req, res) => {
   try {
     const { message } = req.body;
@@ -130,7 +123,6 @@ router.post("/support", verifyToken, async (req, res) => {
     let systemContext = "";
 
     try {
-      // --- Thống kê đề thường theo skill ---
       const skillStats = await Test.aggregate([
         {
           $group: {
@@ -140,7 +132,6 @@ router.post("/support", verifyToken, async (req, res) => {
         },
       ]);
 
-      // --- Thống kê đề thường theo khối/lớp ---
       const gradeStats = await Test.aggregate([
         {
           $group: {
@@ -160,7 +151,6 @@ router.post("/support", verifyToken, async (req, res) => {
         .map((g) => `- Khối ${g._id}: ${g.examCount} đề`)
         .join("\n");
 
-      // --- Thống kê mock exam theo examType (thptqg, ielts, toeic,...) ---
       const mockTypeStats = await MockExam.aggregate([
         {
           $group: {
@@ -175,7 +165,6 @@ router.post("/support", verifyToken, async (req, res) => {
         .map((m) => `- ${m._id}: ${m.examCount} đề thi thử`)
         .join("\n");
 
-      // --- Một số đề thường mới nhất ---
       const latestExams = await Test.find({})
         .sort({ createdAt: -1 })
         .limit(10)
@@ -191,7 +180,6 @@ router.post("/support", verifyToken, async (req, res) => {
         )
         .join("\n");
 
-      // --- Một số mock exam mới nhất (bao gồm THPTQG 2025, v.v.) ---
       const latestMocks = await MockExam.find({})
         .sort({ createdAt: -1 })
         .limit(10)
@@ -226,10 +214,9 @@ router.post("/support", verifyToken, async (req, res) => {
         "Không lấy được metadata đề thi, hãy trả lời chung chung dựa trên hướng dẫn sử dụng hệ thống.";
     }
 
-    // 4) Gọi OpenAI với system prompt chặt chẽ + context đề thi
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      temperature: 0.3,
+    // 4) Gọi Ollama (chat) thay cho OpenAI
+    const ollamaResponse = await ollama.chat({
+      model: OLLAMA_MODEL, // ví dụ: "llama3.2", "qwen2.5", ...
       messages: [
         {
           role: "system",
@@ -248,14 +235,14 @@ router.post("/support", verifyToken, async (req, res) => {
           content: message,
         },
       ],
+      stream: false, // trả về một lần, không stream
     });
 
-    const reply = completion.choices[0]?.message?.content?.trim();
-    return res.json({
-      reply:
-        reply ||
-        "Hiện tại mình chưa trả lời được câu hỏi này. Bạn có thể diễn đạt lại hoặc liên hệ giáo viên nhé.",
-    });
+    const reply =
+      ollamaResponse?.message?.content?.trim?.() ||
+      "Hiện tại mình chưa trả lời được câu hỏi này. Bạn có thể diễn đạt lại hoặc liên hệ giáo viên nhé.";
+
+    return res.json({ reply });
   } catch (err) {
     console.error("Chat support error:", err);
     return res.status(500).json({
