@@ -61,7 +61,6 @@ async function startServer() {
 
   // Middleware
   app.use(express.json());
-  app.use(cors({ origin: "*", credentials: true }));
   app.use(session({ secret: "secretkey", resave: false, saveUninitialized: false }));
   app.use(passport.initialize());
   app.use(passport.session());
