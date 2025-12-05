@@ -5,6 +5,7 @@ dotenv.config();
 
 import express from "express";
 import cors from "cors";
+import { setupCors, allowedOrigins } from "./src/config/cors.js";
 import session from "express-session";
 import passport from "passport";
 import connectDB from "./src/config/db.js";
@@ -51,13 +52,17 @@ async function startServer() {
   const server = http.createServer(app);
 
   // ✅ Khởi tạo Socket.IO
-  const io = new SocketServer(server, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"],
-    },
-  });
-  app.set("io", io);
+// Socket.IO
+const io = new SocketServer(server, {
+  cors: {
+    origin: allowedOrigins,   // dùng lại danh sách bên cors.js
+    methods: ["GET", "POST"],
+  },
+});
+app.set("io", io);
+
+// ===== CORS HTTP =====
+setupCors(app);
 
   // Middleware
   app.use(express.json());
