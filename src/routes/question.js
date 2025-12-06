@@ -48,7 +48,7 @@ const audioUpload = multer({
 router.post(
   "/upload-audio",
   verifyToken,
-  verifyRole(["teacher", "admin"]),
+  verifyRole(["teacher", "admin","school_manager"]),
   audioUpload.single("audio"),
   (req, res) => {
     try {
@@ -76,7 +76,7 @@ router.post(
 router.post(
   "/bulk",
   verifyToken,
-  verifyRole(["teacher", "admin"]),
+  verifyRole(["teacher", "admin","school_manager"]),
   async (req, res) => {
     try {
       const questions = req.body.map((q) => ({ ...q, createdBy: req.user._id }));
@@ -96,7 +96,7 @@ router.post(
 router.post(
   "/",
   verifyToken,
-  verifyRole(["teacher", "admin"]),
+  verifyRole(["teacher", "admin","school_manager"]),
   async (req, res) => {
     try {
       const {
@@ -292,7 +292,7 @@ router.get("/random", verifyToken, async (req, res) => {
 router.delete(
   "/",
   verifyToken,
-  verifyRole(["teacher", "admin"]),
+  verifyRole(["teacher", "admin","school_manager"]),
   async (req, res) => {
     try {
       // chỉ xóa các câu hỏi không nằm trong đề thi nào
@@ -313,7 +313,7 @@ router.delete(
 router.put(
   "/:id",
   verifyToken,
-  verifyRole(["teacher", "admin"]),
+  verifyRole(["teacher", "admin","school_manager"]),
   async (req, res) => {
     try {
       const question = await Question.findByIdAndUpdate(
@@ -334,7 +334,7 @@ router.put(
 router.delete(
   "/:id",
   verifyToken,
-  verifyRole(["teacher", "admin"]),
+  verifyRole(["teacher", "admin","school_manager"]),
   async (req, res) => {
     try {
       const { id } = req.params;
