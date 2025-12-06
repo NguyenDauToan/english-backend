@@ -239,5 +239,38 @@ router.patch(
       }
     }
   );
-  
+  // 🔢 Đếm số yêu cầu giáo viên đang chờ xử lý
+router.get(
+  "/pending-count",
+  verifyToken,
+  verifyRole(["teacher", "school_manager", "admin"]),
+  async (req, res) => {
+    try {
+      const filter = { status: "pending" };
+
+      if (req.user.role === "teacher") {
+        // giáo viên: chỉ yêu cầu của chính mình
+        filter.teacher = req.user.id;
+      }
+
+      if (req.user.role === "school_manager") {
+        // school_manager: yêu cầu trong trường mình
+        const manager = await User.findById(req.user.id);
+        if (!manager?.school) {
+          return res
+            .status(400)
+            .json({ message: "School_manager chưa được gán trường" });
+        }
+        filter.school = manager.school;
+      }
+
+      const count = await TeacherRequest.countDocuments(filter);
+      return res.json({ count }); 
+    } catch (err) {
+      console.error("Lỗi đếm yêu cầu giáo viên pending:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  }
+);
+
 export default router;

@@ -264,7 +264,7 @@ router.get("/me", async (req, res) => {
 router.put("/update", verifyToken, async (req, res) => {
   try {
     const {
-      userId,       // 👈 thêm: id user cần cập nhật (dùng cho admin / manager)
+      userId,       // id user cần cập nhật (dùng cho admin / manager)
       name,
       grade,
       level,
@@ -276,16 +276,17 @@ router.put("/update", verifyToken, async (req, res) => {
 
     // ===== XÁC ĐỊNH USER ĐÍCH =====
     let targetUserId = req.user.id;
+    let targetUser = null;
 
-    // nếu gửi userId khác id đang đăng nhập => chỉ cho admin / school_manager
     if (userId && userId !== req.user.id) {
+      // chỉ cho admin / school_manager sửa người khác
       if (!["admin", "school_manager"].includes(req.user.role)) {
         return res
           .status(403)
           .json({ message: "Bạn không có quyền cập nhật tài khoản này" });
       }
 
-      const targetUser = await User.findById(userId);
+      targetUser = await User.findById(userId);
       if (!targetUser) {
         return res.status(404).json({ message: "User không tồn tại" });
       }
@@ -303,6 +304,12 @@ router.put("/update", verifyToken, async (req, res) => {
       }
 
       targetUserId = userId;
+    } else {
+      // tự sửa chính mình
+      targetUser = await User.findById(targetUserId);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User không tồn tại" });
+      }
     }
 
     // các field đơn giản
@@ -321,8 +328,36 @@ router.put("/update", verifyToken, async (req, res) => {
     }
 
     // ====== xử lý lớp (gán mới / bỏ lớp) ======
-    // ====== xử lý lớp (có thể gán mới hoặc bỏ lớp) ======
     if (typeof classroomId !== "undefined") {
+      const isSelfUpdate =
+        String(targetUserId) === String(req.user.id) &&
+        targetUser.role === "student";
+
+      // kiểm tra xem có đang thực sự "thay đổi" lớp hay không
+      const prevClassId = targetUser.classroom
+        ? String(targetUser.classroom)
+        : "";
+      const newClassId = classroomId ? String(classroomId) : "";
+
+      const isChangingClass = prevClassId && newClassId && prevClassId !== newClassId;
+      const isRemovingClass = prevClassId && !newClassId;
+
+      // 🔒 HỌC SINH TỰ CẬP NHẬT: chỉ cho đổi/bỏ lớp khi needUpdateClass = true
+      // hoặc khi trước đó chưa có lớp (prevClassId = "")
+      if (isSelfUpdate) {
+        const hasClass = !!prevClassId;
+        if (
+          hasClass &&                                 // đã có lớp
+          !targetUser.needUpdateClass &&              // không bị buộc cập nhật nữa
+          (isChangingClass || isRemovingClass)        // lại muốn đổi/bỏ lớp
+        ) {
+          return res.status(400).json({
+            message:
+              "Bạn chỉ được chọn lớp học một lần khi hệ thống yêu cầu. Nếu cần đổi lớp, vui lòng liên hệ nhà trường.",
+          });
+        }
+      }
+
       // luôn xoá khỏi mọi lớp cũ trước
       await Classroom.updateMany(
         { students: targetUserId },
@@ -333,7 +368,7 @@ router.put("/update", verifyToken, async (req, res) => {
         // nếu client gửi id mới → gán vào lớp mới
         classroom = await Classroom.findById(classroomId).select(
           "school schoolYear grade"
-        ); // 👈 nhớ select grade
+        );
         if (!classroom) {
           return res.status(400).json({ message: "Lớp không tồn tại" });
         }
@@ -367,7 +402,7 @@ router.put("/update", verifyToken, async (req, res) => {
         }
 
         if (yearToUse) {
-          updateData.needUpdateClass = false;
+          updateData.needUpdateClass = false; // đã chọn lớp mới cho năm học
         }
 
         await Classroom.findByIdAndUpdate(classroomId, {
@@ -377,10 +412,9 @@ router.put("/update", verifyToken, async (req, res) => {
         // classroomId = "" / null → bỏ lớp
         updateData.classroom = undefined;
         updateData.currentSchoolYear = undefined;
-        // grade có thể để nguyên hoặc tự xử lý nếu muốn
+        // grade có thể để nguyên
       }
     }
-
 
     // ====== cập nhật user đích ======
     const updated = await User.findByIdAndUpdate(targetUserId, updateData, {
@@ -392,7 +426,6 @@ router.put("/update", verifyToken, async (req, res) => {
       .populate("currentSchoolYear", "name startDate endDate");
 
     // ====== tạo token mới CHO CHÍNH NGƯỜI ĐĂNG NHẬP ======
-    // (token của admin, không phải của học sinh)
     const newToken = jwt.sign(
       {
         id: req.user.id,
@@ -415,6 +448,7 @@ router.put("/update", verifyToken, async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
 
 
 router.post("/logout", (req, res) => {

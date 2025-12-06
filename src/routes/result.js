@@ -171,6 +171,46 @@ router.post("/", verifyToken, verifyRole(["student"]), async (req, res) => {
 
           continue;
         }
+        // CASE 3: WRITING_PARAGRAPH – chấm bằng AI (overallScore thang 10)
+        if (question.type === "writing_paragraph") {
+          // mỗi bài viết tính như 10 "điểm" (thang 10)
+          const aiScoreRaw =
+            ans.aiScore ??
+            ans.writingScore ??
+            (ans.writingEval && ans.writingEval.overallScore);
+
+          let aiScore = Number(aiScoreRaw);
+          if (!Number.isFinite(aiScore) || aiScore < 0) aiScore = 0;
+
+          // mặc định thang 10, nếu FE gửi aiMax thì dùng luôn
+          let aiMax = Number(ans.aiMax ?? 10);
+          if (!Number.isFinite(aiMax) || aiMax <= 0) aiMax = 10;
+
+          // không cho vượt quá aiMax
+          if (aiScore > aiMax) aiScore = aiMax;
+
+          // cộng vào tổng cho bài thi
+          totalItems += aiMax;
+          totalCorrectItems += aiScore;
+
+          // cộng vào thống kê skill
+          skillStats[skillKey].total += aiMax;
+          skillStats[skillKey].correct += aiScore;
+
+          evaluatedAnswers.push({
+            ...baseInfo,
+            questionText: question.content,
+            answer: ans.answer ?? "", // đoạn HS viết
+            correct: "(chấm bởi AI Writing, thang 10)",
+            isCorrect: false,         // câu mở, nên không true/false
+            subIndex: null,
+            aiScore,
+            aiMax,
+            writingEval: ans.writingEval || null, // để FE muốn show chi tiết
+          });
+
+          continue;
+        }
 
         // CASE 3: SPEAKING – lấy điểm từ SpeakingAttempt (AI đã chấm)
         if (
@@ -447,11 +487,11 @@ router.get(
         finishedAt: r.createdAt,
         details: Array.isArray(r.details)
           ? r.details.map((d) => ({
-              skill: d.skill,
-              score: d.score,
-              total: d.total,
-              accuracy: d.accuracy,
-            }))
+            skill: d.skill,
+            score: d.score,
+            total: d.total,
+            accuracy: d.accuracy,
+          }))
           : [],
       }));
 
@@ -657,162 +697,162 @@ router.get(
 /* =========================
   📊 10. Thống kê theo TRƯỜNG
   ========================= */
-  router.get(
-    "/stats/school/:schoolId",
-    verifyToken,
-    verifyRole(["admin", "teacher", "school_manager"]),
-    async (req, res) => {
-      try {
-        const { schoolId } = req.params;
-        const { year } = req.query;
-  
-        // ràng buộc quyền như cũ...
-        if (req.user.role !== "admin") {
-          if (!req.user.school) {
-            return res
-              .status(400)
-              .json({ message: "Tài khoản chưa được gán trường" });
-          }
-          if (req.user.school.toString() !== schoolId.toString()) {
-            return res
-              .status(403)
-              .json({ message: "Không có quyền xem thống kê trường này" });
-          }
+router.get(
+  "/stats/school/:schoolId",
+  verifyToken,
+  verifyRole(["admin", "teacher", "school_manager"]),
+  async (req, res) => {
+    try {
+      const { schoolId } = req.params;
+      const { year } = req.query;
+
+      // ràng buộc quyền như cũ...
+      if (req.user.role !== "admin") {
+        if (!req.user.school) {
+          return res
+            .status(400)
+            .json({ message: "Tài khoản chưa được gán trường" });
         }
-  
-        const filter = { school: schoolId };
-        if (year) {
-          const y = Number(year);
-          if (!Number.isNaN(y)) {
-            const start = new Date(y, 0, 1);
-            const end = new Date(y + 1, 0, 1);
-            filter.createdAt = { $gte: start, $lt: end };
-          }
+        if (req.user.school.toString() !== schoolId.toString()) {
+          return res
+            .status(403)
+            .json({ message: "Không có quyền xem thống kê trường này" });
         }
-  
-        const results = await Result.find(filter)
-          .populate({
-            path: "user",
-            select: "name email classroom",
-            populate: {
-              path: "classroom",
-              select: "name code",          // 👈 lấy luôn tên + mã lớp
-            },
-          })
-          .populate("test", "title")
-          .sort({ createdAt: -1 });
-  
-        if (!results.length) {
-          return res.json({
-            schoolId,
-            totalResults: 0,
-            totalStudents: 0,
-            avgScore: 0,
-            minScore: 0,
-            maxScore: 0,
-            perTest: [],
-            perStudent: [],
-          });
-        }
-  
-        const totalResults = results.length;
-        let totalScore = 0;
-        let minScore = Number.POSITIVE_INFINITY;
-        let maxScore = Number.NEGATIVE_INFINITY;
-  
-        const studentsSet = new Set();
-        const perTestMap = new Map();
-        const perStudentMap = new Map();
-  
-        results.forEach((r) => {
-          const s = Number(r.score || 0);
-          totalScore += s;
-          if (s < minScore) minScore = s;
-          if (s > maxScore) maxScore = s;
-  
-          if (r.user) {
-            const sid = r.user._id.toString();
-            studentsSet.add(sid);
-  
-            const cls = r.user.classroom; // đã populate
-            const className = cls?.name || "";
-            const classCode = cls?.code || "";
-  
-            if (!perStudentMap.has(sid)) {
-              perStudentMap.set(sid, {
-                studentId: r.user._id,
-                studentName: r.user.name,
-                studentEmail: r.user.email || "",
-                className,          // 👈 lưu lớp
-                classCode,
-                count: 0,
-                totalScore: 0,
-                minScore: Number.POSITIVE_INFINITY,
-                maxScore: Number.NEGATIVE_INFINITY,
-              });
-            }
-            const st = perStudentMap.get(sid);
-            st.count += 1;
-            st.totalScore += s;
-            if (s < st.minScore) st.minScore = s;
-            if (s > st.maxScore) st.maxScore = s;
-          }
-  
-          if (r.test) {
-            const key = r.test._id.toString();
-            if (!perTestMap.has(key)) {
-              perTestMap.set(key, {
-                testId: r.test._id,
-                testTitle: r.test.title,
-                count: 0,
-                totalScore: 0,
-              });
-            }
-            const item = perTestMap.get(key);
-            item.count += 1;
-            item.totalScore += s;
-          }
-        });
-  
-        const avgScore = totalScore / totalResults;
-        const totalStudents = studentsSet.size;
-  
-        const perTest = Array.from(perTestMap.values()).map((t) => ({
-          testId: t.testId,
-          testTitle: t.testTitle,
-          count: t.count,
-          avgScore: Number((t.totalScore / t.count).toFixed(2)),
-        }));
-  
-        const perStudent = Array.from(perStudentMap.values()).map((st) => ({
-          studentId: st.studentId,
-          studentName: st.studentName,
-          studentEmail: st.studentEmail,
-          className: st.className || "",       // 👈 trả về thêm
-          classCode: st.classCode || "",
-          count: st.count,
-          avgScore: Number((st.totalScore / st.count).toFixed(2)),
-          minScore: Number(st.minScore.toFixed(2)),
-          maxScore: Number(st.maxScore.toFixed(2)),
-        }));
-  
-        res.json({
-          schoolId,
-          totalResults,
-          totalStudents,
-          avgScore: Number(avgScore.toFixed(2)),
-          minScore: Number(minScore.toFixed(2)),
-          maxScore: Number(maxScore.toFixed(2)),
-          perTest,
-          perStudent,
-        });
-      } catch (err) {
-        console.error("Lỗi thống kê theo trường:", err);
-        res.status(500).json({ message: "Lỗi server khi thống kê theo trường" });
       }
+
+      const filter = { school: schoolId };
+      if (year) {
+        const y = Number(year);
+        if (!Number.isNaN(y)) {
+          const start = new Date(y, 0, 1);
+          const end = new Date(y + 1, 0, 1);
+          filter.createdAt = { $gte: start, $lt: end };
+        }
+      }
+
+      const results = await Result.find(filter)
+        .populate({
+          path: "user",
+          select: "name email classroom",
+          populate: {
+            path: "classroom",
+            select: "name code",          // 👈 lấy luôn tên + mã lớp
+          },
+        })
+        .populate("test", "title")
+        .sort({ createdAt: -1 });
+
+      if (!results.length) {
+        return res.json({
+          schoolId,
+          totalResults: 0,
+          totalStudents: 0,
+          avgScore: 0,
+          minScore: 0,
+          maxScore: 0,
+          perTest: [],
+          perStudent: [],
+        });
+      }
+
+      const totalResults = results.length;
+      let totalScore = 0;
+      let minScore = Number.POSITIVE_INFINITY;
+      let maxScore = Number.NEGATIVE_INFINITY;
+
+      const studentsSet = new Set();
+      const perTestMap = new Map();
+      const perStudentMap = new Map();
+
+      results.forEach((r) => {
+        const s = Number(r.score || 0);
+        totalScore += s;
+        if (s < minScore) minScore = s;
+        if (s > maxScore) maxScore = s;
+
+        if (r.user) {
+          const sid = r.user._id.toString();
+          studentsSet.add(sid);
+
+          const cls = r.user.classroom; // đã populate
+          const className = cls?.name || "";
+          const classCode = cls?.code || "";
+
+          if (!perStudentMap.has(sid)) {
+            perStudentMap.set(sid, {
+              studentId: r.user._id,
+              studentName: r.user.name,
+              studentEmail: r.user.email || "",
+              className,          // 👈 lưu lớp
+              classCode,
+              count: 0,
+              totalScore: 0,
+              minScore: Number.POSITIVE_INFINITY,
+              maxScore: Number.NEGATIVE_INFINITY,
+            });
+          }
+          const st = perStudentMap.get(sid);
+          st.count += 1;
+          st.totalScore += s;
+          if (s < st.minScore) st.minScore = s;
+          if (s > st.maxScore) st.maxScore = s;
+        }
+
+        if (r.test) {
+          const key = r.test._id.toString();
+          if (!perTestMap.has(key)) {
+            perTestMap.set(key, {
+              testId: r.test._id,
+              testTitle: r.test.title,
+              count: 0,
+              totalScore: 0,
+            });
+          }
+          const item = perTestMap.get(key);
+          item.count += 1;
+          item.totalScore += s;
+        }
+      });
+
+      const avgScore = totalScore / totalResults;
+      const totalStudents = studentsSet.size;
+
+      const perTest = Array.from(perTestMap.values()).map((t) => ({
+        testId: t.testId,
+        testTitle: t.testTitle,
+        count: t.count,
+        avgScore: Number((t.totalScore / t.count).toFixed(2)),
+      }));
+
+      const perStudent = Array.from(perStudentMap.values()).map((st) => ({
+        studentId: st.studentId,
+        studentName: st.studentName,
+        studentEmail: st.studentEmail,
+        className: st.className || "",       // 👈 trả về thêm
+        classCode: st.classCode || "",
+        count: st.count,
+        avgScore: Number((st.totalScore / st.count).toFixed(2)),
+        minScore: Number(st.minScore.toFixed(2)),
+        maxScore: Number(st.maxScore.toFixed(2)),
+      }));
+
+      res.json({
+        schoolId,
+        totalResults,
+        totalStudents,
+        avgScore: Number(avgScore.toFixed(2)),
+        minScore: Number(minScore.toFixed(2)),
+        maxScore: Number(maxScore.toFixed(2)),
+        perTest,
+        perStudent,
+      });
+    } catch (err) {
+      console.error("Lỗi thống kê theo trường:", err);
+      res.status(500).json({ message: "Lỗi server khi thống kê theo trường" });
     }
-  );
-  // =========================
+  }
+);
+// =========================
 // 📊 11. Thống kê theo LỚP
 // =========================
 router.get(
@@ -836,8 +876,8 @@ router.get(
       // lấy id trường, tên trường, mã trường
       const classroomSchoolId = classroom.school
         ? (classroom.school._id
-            ? classroom.school._id.toString()
-            : classroom.school.toString())
+          ? classroom.school._id.toString()
+          : classroom.school.toString())
         : null;
 
       const schoolName =

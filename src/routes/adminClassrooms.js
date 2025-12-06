@@ -106,7 +106,7 @@ router.get(
   verifyRole(["admin", "school_manager", "teacher", "student"]),
   async (req, res) => {
     try {
-      const { schoolId, grade, schoolYearId ,includeStudents } = req.query;
+      const { schoolId, grade, schoolYearId ,includeStudents ,teacherId } = req.query;
       const role = req.user.role;
       const filter = {};
 
@@ -118,13 +118,37 @@ router.get(
           }
           filter.school = schoolId;
         }
-      } else if (role === "school_manager" || role === "teacher") {
+        // admin muốn xem lớp của 1 giáo viên cụ thể
+        if (teacherId) {
+          if (!mongoose.Types.ObjectId.isValid(teacherId)) {
+            return res.status(400).json({ message: "teacherId không hợp lệ" });
+          }
+          filter.homeroomTeacher = teacherId;
+        }
+      } else if (role === "school_manager") {
         if (!req.user.school) {
           return res
             .status(403)
             .json({ message: "Tài khoản chưa được gắn với trường nào" });
         }
         filter.school = req.user.school;
+
+        // manager có thể xem lớp của 1 GV trong trường mình (optional)
+        if (teacherId) {
+          if (!mongoose.Types.ObjectId.isValid(teacherId)) {
+            return res.status(400).json({ message: "teacherId không hợp lệ" });
+          }
+          filter.homeroomTeacher = teacherId;
+        }
+      } else if (role === "teacher") {
+        if (!req.user.school) {
+          return res
+            .status(403)
+            .json({ message: "Tài khoản chưa được gắn với trường nào" });
+        }
+        // GIÁO VIÊN: chỉ xem lớp của chính mình trong trường đó
+        filter.school = req.user.school;
+        filter.homeroomTeacher = req.user._id;
       } else if (role === "student") {
         if (schoolId) {
           if (!mongoose.Types.ObjectId.isValid(schoolId)) {

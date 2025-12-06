@@ -361,17 +361,19 @@ router.delete(
   }
 );
 
-
-// ========== IMPORT EXCEL (chỉ chỉnh validGrades) ==========
+// ========== IMPORT EXCEL (chỉ Reading / Writing / Speaking) ==========
 router.post(
   "/import",
   verifyToken,
-  verifyRole(["teacher", "admin"]),
+  verifyRole(["teacher", "admin","school_manager"]),
   upload.single("file"),
   async (req, res) => {
     try {
-      if (!req.file)
-        return res.status(400).json({ message: "Vui lòng tải lên file Excel" });
+      if (!req.file) {
+        return res
+          .status(400)
+          .json({ message: "Vui lòng tải lên file Excel" });
+      }
 
       const {
         skill: overrideSkill,
@@ -381,7 +383,13 @@ router.post(
 
       const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
       const sheetName = workbook.SheetNames[0];
-      const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+      if (!rows.length) {
+        return res
+          .status(400)
+          .json({ message: "File Excel không có dữ liệu" });
+      }
 
       const validGrades = [
         "6",
@@ -397,52 +405,361 @@ router.post(
         "vstep",
       ];
 
-      const questions = data.map((q, idx) => {
-        const skill = overrideSkill || q.Skill;
-        const grade = overrideGrade || String(q.Grade);
-        const level = overrideLevel || q.Level || "easy";
-        const allowedTypes = [
+      const ALLOWED_SKILLS = ["reading", "writing", "speaking"];
+
+      const questions = rows.map((row, idx) => {
+        const index = idx + 1;
+
+        const rawSkill = (overrideSkill || row.Skill || row.skill || "")
+          .toString()
+          .trim()
+          .toLowerCase();
+
+        if (!rawSkill) {
+          throw new Error(`Dòng ${index}: thiếu Skill`);
+        }
+        if (!ALLOWED_SKILLS.includes(rawSkill)) {
+          throw new Error(
+            `Dòng ${index}: Skill không hợp lệ hoặc không được phép import: ${rawSkill}`
+          );
+        }
+        if (rawSkill === "listening") {
+          // chỉ để chắc chắn, dù ALLOWED_SKILLS đã loại
+          throw new Error(
+            `Dòng ${index}: Listening cần audio, vui lòng tạo thủ công ở form Thêm câu hỏi`
+          );
+        }
+
+        const rawGrade = overrideGrade || row.Grade || row.grade;
+        const grade = rawGrade ? String(rawGrade).trim().toLowerCase() : "";
+        if (!grade) {
+          throw new Error(`Dòng ${index}: thiếu Grade`);
+        }
+        if (!validGrades.includes(grade)) {
+          throw new Error(`Dòng ${index}: Grade không hợp lệ: ${grade}`);
+        }
+
+        const rawLevel = overrideLevel || row.Level || row.level || "easy";
+        const level = String(rawLevel).trim().toLowerCase();
+
+        const content = (row.Content || row.content || "").toString().trim();
+        if (!content) {
+          throw new Error(`Dòng ${index}: thiếu Content`);
+        }
+
+        const rawType = (row.Type || row.type || "").toString().trim();
+
+        // mapping type theo skill
+        let type = rawType || "multiple_choice";
+
+        const READING_TYPES = [
           "multiple_choice",
           "fill_blank",
           "true_false",
-          "reading_cloze",
-          "writing_sentence_order",
-          "writing_paragraph",
-          "writing_add_words",
-          "speaking",
         ];
-        
-        const rawType = q.Type || "multiple_choice";
-        const type = allowedTypes.includes(rawType) ? rawType : "multiple_choice";
-        
-        if (!skill) throw new Error(`Câu hỏi thứ ${idx + 1} thiếu skill`);
-        if (!grade) throw new Error(`Câu hỏi thứ ${idx + 1} thiếu grade`);
-        if (!validGrades.includes(grade))
-          throw new Error(
-            `Câu hỏi thứ ${idx + 1} grade không hợp lệ: ${grade}`
-          );
+        const WRITING_TYPES = [
+          "writing_sentence_order",
+          "writing_add_words",
+          "writing_paragraph",
+        ];
+        const SPEAKING_TYPES = ["speaking"];
 
-          return {
-            content: q.Content,
-            type,
-            options: q.Options ? q.Options.split("|") : [],
-            answer: q.Answer,
-            skill,
-            level,
-            grade,
-            explanation: q.Explanation,
-            tags: q.Tags ? q.Tags.split("|") : [],
-            createdBy: req.user._id,
-          };          
+        if (rawSkill === "reading") {
+          if (!READING_TYPES.includes(type)) {
+            // nếu người dùng gõ bừa, fallback multiple_choice
+            type = "multiple_choice";
+          }
+        } else if (rawSkill === "writing") {
+          if (!WRITING_TYPES.includes(type)) {
+            throw new Error(
+              `Dòng ${index}: Type không hợp lệ cho Writing. Hỗ trợ: ${WRITING_TYPES.join(
+                ", "
+              )}`
+            );
+          }
+        } else if (rawSkill === "speaking") {
+          // luôn ép về speaking
+          type = "speaking";
+        }
+
+        const optionsStr = row.Options || row.options || "";
+        const options =
+          optionsStr && typeof optionsStr === "string"
+            ? optionsStr.split("|").map((s) => s.trim())
+            : [];
+
+        const answerRaw = row.Answer || row.answer || "";
+        let answer = answerRaw
+          ? answerRaw.toString().trim()
+          : undefined;
+
+        const explanation = row.Explanation || row.explanation || "";
+        const tagsStr = row.Tags || row.tags || "";
+        const tags =
+          tagsStr && typeof tagsStr === "string"
+            ? tagsStr.split("|").map((s) => s.trim())
+            : [];
+
+        // ===== VALIDATE / CHUẨN HÓA THEO TYPE =====
+
+        if (rawSkill === "reading") {
+          if (type === "multiple_choice") {
+            if (!options.length) {
+              throw new Error(
+                `Dòng ${index}: Reading multiple_choice phải có Options (A|B|C|D)`
+              );
+            }
+            if (!answer) {
+              throw new Error(
+                `Dòng ${index}: Reading multiple_choice phải có Answer`
+              );
+            }
+          } else if (type === "fill_blank") {
+            if (!answer) {
+              throw new Error(
+                `Dòng ${index}: Reading fill_blank phải có Answer`
+              );
+            }
+          } else if (type === "true_false") {
+            if (!answer) {
+              throw new Error(
+                `Dòng ${index}: Reading true_false phải có Answer (true/false)`
+              );
+            }
+            const ansLower = answer.toLowerCase();
+            if (["t", "true", "đ", "đúng"].includes(ansLower)) {
+              answer = "true";
+            } else if (["f", "false", "sai"].includes(ansLower)) {
+              answer = "false";
+            } else {
+              throw new Error(
+                `Dòng ${index}: Answer cho true_false phải là true/false`
+              );
+            }
+          }
+        }
+
+        if (rawSkill === "writing") {
+          if (type === "writing_paragraph") {
+            // không bắt buộc Answer
+            answer = undefined;
+          } else {
+            if (!answer) {
+              throw new Error(
+                `Dòng ${index}: Writing (${type}) phải có Answer (đáp án chuẩn)`
+              );
+            }
+          }
+        }
+
+        if (rawSkill === "speaking") {
+          // giống route POST: nếu không có answer -> dùng content
+          if (!answer) {
+            answer = content;
+          }
+        }
+
+        return {
+          content,
+          type,
+          options:
+            type === "multiple_choice" ? options : undefined,
+          answer,
+          skill: rawSkill,
+          level,
+          grade,
+          explanation,
+          tags,
+          createdBy: req.user._id,
+        };
       });
 
       const inserted = await Question.insertMany(questions);
-      res
-        .status(201)
-        .json({ message: `Đã thêm ${inserted.length} câu hỏi`, inserted });
+      res.status(201).json({
+        message: `Đã thêm ${inserted.length} câu hỏi`,
+        insertedCount: inserted.length,
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({ message: err.message });
+    }
+  }
+);
+
+// ========== EXPORT FILE MẪU IMPORT ==========
+router.get(
+  "/import/template",
+  verifyToken,
+  verifyRole(["teacher", "admin", "school_manager"]),
+  async (req, res) => {
+    try {
+      const skill = (req.query.skill || "").toString().toLowerCase();
+      const type = (req.query.type || "").toString().toLowerCase();
+      console.log("TEMPLATE_QUERY:", req.query, "skill=", skill, "type=", type);
+      const header = [
+        "Skill",
+        "Type",
+        "Grade",
+        "Level",
+        "Content",
+        "Options",
+        "Answer",
+        "Explanation",
+        "Tags",
+      ];
+
+      const rows = [];
+
+      // === Reading ===
+      if (skill === "reading" || !skill) {
+        if (!type || type === "multiple_choice") {
+          rows.push({
+            Skill: "reading",
+            Type: "multiple_choice",
+            Grade: "9",
+            Level: "easy",
+            Content: "What is the capital of France?",
+            Options: "Paris|London|Berlin|Tokyo",
+            Answer: "Paris",
+            Explanation: "Paris is the capital city of France.",
+            Tags: "reading,basic",
+          });
+        }
+
+        if (!type || type === "true_false") {
+          rows.push({
+            Skill: "reading",
+            Type: "true_false",
+            Grade: "9",
+            Level: "easy",
+            Content: "The sun rises in the west.",
+            Options: "",
+            Answer: "false",
+            Explanation: "The sun rises in the east.",
+            Tags: "reading,true_false",
+          });
+        }
+
+        if (!type || type === "fill_blank") {
+          rows.push({
+            Skill: "reading",
+            Type: "fill_blank",
+            Grade: "9",
+            Level: "easy",
+            Content: "I usually go to school ____ bus.",
+            Options: "",
+            Answer: "by",
+            Explanation: "",
+            Tags: "reading,fill_blank",
+          });
+        }
+      }
+
+      // === Writing ===
+      if (skill === "writing" || !skill) {
+        if (!type || type === "writing_sentence_order") {
+          rows.push({
+            Skill: "writing",
+            Type: "writing_sentence_order",
+            Grade: "10",
+            Level: "medium",
+            Content:
+              "Sắp xếp các từ sau thành câu hoàn chỉnh: / like / I / playing / football",
+            Options: "",
+            Answer: "I like playing football.",
+            Explanation: "",
+            Tags: "writing,sentence_order",
+          });
+        }
+
+        if (!type || type === "writing_add_words") {
+          rows.push({
+            Skill: "writing",
+            Type: "writing_add_words",
+            Grade: "10",
+            Level: "medium",
+            Content:
+              "Hoàn thành câu bằng cách thêm từ còn thiếu: I ___ going to the park on Sunday.",
+            Options: "",
+            Answer: "am",
+            Explanation: "",
+            Tags: "writing,add_words",
+          });
+        }
+
+        if (!type || type === "writing_paragraph") {
+          rows.push({
+            Skill: "writing",
+            Type: "writing_paragraph",
+            Grade: "10",
+            Level: "medium",
+            Content:
+              "Write a short paragraph (50–70 words) about your favorite hobby.",
+            Options: "",
+            Answer: "",
+            Explanation: "",
+            Tags: "writing,paragraph",
+          });
+        }
+      }
+
+      // === Speaking ===
+      if (skill === "speaking" || !skill) {
+        if (!type || type === "speaking") {
+          rows.push({
+            Skill: "speaking",
+            Type: "speaking",
+            Grade: "9",
+            Level: "easy",
+            Content:
+              "My favorite hobby is reading books. I read every evening before I go to bed.",
+            Options: "",
+            Answer: "",
+            Explanation:
+              "Đoạn văn chuẩn, học sinh sẽ đọc lại. Nếu bỏ trống Answer, hệ thống sẽ dùng Content làm đáp án chuẩn.",
+            Tags: "speaking,reading_aloud",
+          });
+        }
+      }
+
+      if (!rows.length) {
+        return res
+          .status(400)
+          .json({ message: "Skill/type không hợp lệ để tạo file mẫu" });
+      }
+
+      const worksheet = XLSX.utils.json_to_sheet(rows, { header });
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "QuestionsTemplate");
+
+      const buffer = XLSX.write(workbook, {
+        bookType: "xlsx",
+        type: "buffer",
+      });
+
+      // Đặt tên file theo skill + type
+      let filename = "questions_template.xlsx";
+      if (skill) {
+        filename = `questions_template_${skill}${
+          type ? "_" + type : ""
+        }.xlsx`;
+      }
+
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+      );
+      console.log("TEMPLATE_ROWS:", rows.length);
+      return res.send(buffer);
+    } catch (err) {
+      console.error(err);
+      res
+        .status(500)
+        .json({ message: "Lỗi server khi tạo file mẫu import" });
     }
   }
 );

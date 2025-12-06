@@ -8,7 +8,7 @@ import Classroom from "../models/classroom.js";
 
 export default function createAuthGoogleRoutes() {
   const router = express.Router();
-  const FRONTEND_URL = process.env.FRONTEND_URL || "https://datn-ebon-eight.vercel.app/";
+  const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:8080";
 
   passport.use(
     new GoogleStrategy(

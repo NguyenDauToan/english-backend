@@ -41,7 +41,7 @@ async function callOllama(prompt) {
 router.post(
   "/",
   verifyToken,
-  verifyRole(["teacher", "admin","school_manager"]),
+  verifyRole(["teacher", "admin", "school_manager"]),
   async (req, res) => {
     try {
       const {
@@ -63,128 +63,128 @@ router.post(
       // ====== 1. Fill in the blank ======
       if (type === "fill_blank") {
         prompt = `Hãy tạo ${amount} câu hỏi điền vào chỗ trống (fill-in-the-blank) tiếng Anh cho học sinh/thí sinh trình độ lớp hoặc kỳ thi "${grade}", cấp độ ${level}, kỹ năng ${skill}.
-Mỗi câu hỏi có dạng: We ___ (go) to the park yesterday.
-Yêu cầu:
-- Mỗi câu hỏi chỉ có 1 chỗ trống.
-- Nội dung phù hợp trình độ tương ứng, ngữ pháp/vocabulary rõ ràng.
+  Mỗi câu hỏi có dạng: We ___ (go) to the park yesterday.
+  Yêu cầu:
+  - Mỗi câu hỏi chỉ có 1 chỗ trống.
+  - Nội dung phù hợp trình độ tương ứng, ngữ pháp/vocabulary rõ ràng.
 
-Trả về DUY NHẤT một JSON là một mảng, ví dụ:
-[
-  {
-    "content": "We ___ (go) to the park yesterday.",
-    "answer": "went",
-    "explanation": "Quá khứ đơn của 'go' là 'went'."
-  }
-]
+  Trả về DUY NHẤT một JSON là một mảng, ví dụ:
+  [
+    {
+      "content": "We ___ (go) to the park yesterday.",
+      "answer": "went",
+      "explanation": "Quá khứ đơn của 'go' là 'went'."
+    }
+  ]
 
-Quy định:
-- content: câu hỏi có chỗ trống và có gợi ý dạng động từ nguyên thể hoặc từ trong ngoặc.
-- answer: từ cần điền đúng (không kèm ngoặc).
-- explanation: giải thích ngắn gọn bằng tiếng Việt hoặc Anh.
-Không tạo options. Không giải thích thừa ngoài JSON.`;
+  Quy định:
+  - content: câu hỏi có chỗ trống và có gợi ý dạng động từ nguyên thể hoặc từ trong ngoặc.
+  - answer: từ cần điền đúng (không kèm ngoặc).
+  - explanation: giải thích ngắn gọn bằng tiếng Việt hoặc Anh.
+  Không tạo options. Không giải thích thừa ngoài JSON.`;
       }
 
       // ====== 2. Writing – sắp xếp câu ======
       else if (type === "writing_sentence_order") {
         prompt = `Hãy tạo ${amount} câu bài tập Writing dạng SẮP XẾP CÂU (writing sentence order) tiếng Anh cho học sinh/thí sinh trình độ lớp hoặc kỳ thi "${grade}", cấp độ ${level}.
-Mỗi câu gồm:
-- Một câu tiếng Anh HOÀN CHỈNH (answer).
-- Một phiên bản bị xáo trộn trật tự từ hoặc cụm từ (content), dùng để HS kéo thả lại.
+  Mỗi câu gồm:
+  - Một câu tiếng Anh HOÀN CHỈNH (answer).
+  - Một phiên bản bị xáo trộn trật tự từ hoặc cụm từ (content), dùng để HS kéo thả lại.
 
-YÊU CẦU RẤT RÕ:
-- KHÔNG được tạo bài tập dạng thêm từ còn thiếu, KHÔNG có dấu "___", "____", dấu gạch dưới, hoặc ngoặc gợi ý.
-- "content" PHẢI là danh sách từ/cụm từ đã xáo trộn, phân tách bằng dấu "/" (ví dụ: "plays / soccer / every / Tom / weekend / his / friend").
-- "answer" PHẢI là câu hoàn chỉnh đúng, viết hoa chuẩn, có dấu chấm cuối câu nếu cần.
-- "explanation" là giải thích ngắn, có thể ghi cấu trúc: "Chủ ngữ + động từ + tân ngữ + trạng từ chỉ thời gian."
+  YÊU CẦU RẤT RÕ:
+  - KHÔNG được tạo bài tập dạng thêm từ còn thiếu, KHÔNG có dấu "___", "____", dấu gạch dưới, hoặc ngoặc gợi ý.
+  - "content" PHẢI là danh sách từ/cụm từ đã xáo trộn, phân tách bằng dấu "/" (ví dụ: "plays / soccer / every / Tom / weekend / his / friend").
+  - "answer" PHẢI là câu hoàn chỉnh đúng, viết hoa chuẩn, có dấu chấm cuối câu nếu cần.
+  - "explanation" là giải thích ngắn, có thể ghi cấu trúc: "Chủ ngữ + động từ + tân ngữ + trạng từ chỉ thời gian."
 
-Trả về DUY NHẤT một JSON là một mảng, ví dụ:
-[
-  {
-    "content": "plays / soccer / every / Tom / weekend / his / friend",
-    "answer": "Tom plays soccer with his friend every weekend.",
-    "explanation": "Cấu trúc: Chủ ngữ + động từ + tân ngữ + trạng từ chỉ thời gian."
-  }
-]
+  Trả về DUY NHẤT một JSON là một mảng, ví dụ:
+  [
+    {
+      "content": "plays / soccer / every / Tom / weekend / his / friend",
+      "answer": "Tom plays soccer with his friend every weekend.",
+      "explanation": "Cấu trúc: Chủ ngữ + động từ + tân ngữ + trạng từ chỉ thời gian."
+    }
+  ]
 
-Quy định:
-- content: câu bị xáo trộn (các từ/cụm từ ngăn cách bởi dấu "/"), KHÔNG có chỗ trống cần điền, KHÔNG yêu cầu "thêm từ".
-- answer: câu hoàn chỉnh đúng.
-- explanation: giải thích ngắn (có thể ghi chú cấu trúc ngữ pháp).
-Không trả về options. Không ghi thêm text ngoài JSON.`;
+  Quy định:
+  - content: câu bị xáo trộn (các từ/cụm từ ngăn cách bởi dấu "/"), KHÔNG có chỗ trống cần điền, KHÔNG yêu cầu "thêm từ".
+  - answer: câu hoàn chỉnh đúng.
+  - explanation: giải thích ngắn (có thể ghi chú cấu trúc ngữ pháp).
+  Không trả về options. Không ghi thêm text ngoài JSON.`;
       }
 
       // ====== 3. Writing – thêm từ còn thiếu ======
       else if (type === "writing_add_words") {
         prompt = `Hãy tạo ${amount} câu bài tập Writing dạng thêm từ còn thiếu (writing add words) tiếng Anh cho học sinh/thí sinh trình độ lớp hoặc kỳ thi "${grade}", cấp độ ${level}.
-Mỗi bài:
-- Đưa ra câu chưa hoàn chỉnh hoặc thiếu 1–2 từ.
-- Yêu cầu học sinh viết lại câu đúng, thêm từ còn thiếu.
+  Mỗi bài:
+  - Đưa ra câu chưa hoàn chỉnh hoặc thiếu 1–2 từ.
+  - Yêu cầu học sinh viết lại câu đúng, thêm từ còn thiếu.
 
-Trả về DUY NHẤT một JSON là một mảng, ví dụ:
-[
-  {
-    "content": "She _____ going to school now. (thêm be-verb thích hợp)",
-    "answer": "She is going to school now.",
-    "explanation": "Hiện tại tiếp diễn: S + be + V-ing."
-  }
-]
+  Trả về DUY NHẤT một JSON là một mảng, ví dụ:
+  [
+    {
+      "content": "She _____ going to school now. (thêm be-verb thích hợp)",
+      "answer": "She is going to school now.",
+      "explanation": "Hiện tại tiếp diễn: S + be + V-ing."
+    }
+  ]
 
-Quy định:
-- content: câu yêu cầu, có mô tả hoặc hướng dẫn chỗ cần thêm từ.
-- answer: câu đầy đủ đúng.
-- explanation: giải thích ngắn về ngữ pháp/từ vựng.
-Không trả về options. Không ghi thêm text ngoài JSON.`;
+  Quy định:
+  - content: câu yêu cầu, có mô tả hoặc hướng dẫn chỗ cần thêm từ.
+  - answer: câu đầy đủ đúng.
+  - explanation: giải thích ngắn về ngữ pháp/từ vựng.
+  Không trả về options. Không ghi thêm text ngoài JSON.`;
       }
 
       // ====== 4. Writing – viết đoạn văn ======
       else if (type === "writing_paragraph") {
         prompt = `Hãy tạo ${amount} đề bài Writing dạng viết đoạn văn (writing paragraph) tiếng Anh cho học sinh/thí sinh trình độ lớp hoặc kỳ thi "${grade}", cấp độ ${level}.
-Mỗi đề bài yêu cầu viết đoạn văn khoảng 80–120 từ (có thể ghi rõ số từ) về một chủ đề quen thuộc.
+  Mỗi đề bài yêu cầu viết đoạn văn khoảng 80–120 từ (có thể ghi rõ số từ) về một chủ đề quen thuộc.
 
-Trả về DUY NHẤT một JSON là một mảng, ví dụ:
-[
-  {
-    "content": "Write a paragraph (80-100 words) about your favorite hobby. Describe what it is, how often you do it, and why you like it.",
-    "answer": "Sample paragraph: ...",
-    "explanation": "Gợi ý cấu trúc đoạn văn: câu chủ đề, 2-3 câu triển khai, câu kết."
-  }
-]
+  Trả về DUY NHẤT một JSON là một mảng, ví dụ:
+  [
+    {
+      "content": "Write a paragraph (80-100 words) about your favorite hobby. Describe what it is, how often you do it, and why you like it.",
+      "answer": "Sample paragraph: ...",
+      "explanation": "Gợi ý cấu trúc đoạn văn: câu chủ đề, 2-3 câu triển khai, câu kết."
+    }
+  ]
 
-Quy định:
-- content: đề bài yêu cầu viết đoạn văn, ghi rõ số từ gợi ý.
-- answer: một đoạn văn mẫu (sample answer) phù hợp trình độ để giáo viên tham khảo.
-- explanation: gợi ý ngắn về cấu trúc hoặc ý chính.
-Không trả về options. Không ghi thêm text ngoài JSON.`;
+  Quy định:
+  - content: đề bài yêu cầu viết đoạn văn, ghi rõ số từ gợi ý.
+  - answer: một đoạn văn mẫu (sample answer) phù hợp trình độ để giáo viên tham khảo.
+  - explanation: gợi ý ngắn về cấu trúc hoặc ý chính.
+  Không trả về options. Không ghi thêm text ngoài JSON.`;
       }
 
       // ====== 5. Speaking ======
       else if (type === "speaking" || skill === "speaking") {
         prompt = `Hãy tạo ${amount} bài SPEAKING dạng ĐỌC ĐOẠN VĂN TIẾNG ANH cho học sinh/thí sinh trình độ lớp hoặc kỳ thi "${grade}", cấp độ ${level}.
-      Mục tiêu: học sinh ĐỌC TO một đoạn văn ngắn để luyện phát âm, ngữ điệu, độ trôi chảy.
-      
-      YÊU CẦU:
-      - Mỗi phần tử trong mảng JSON là 1 task speaking độc lập.
-      - Mỗi task gồm MỘT ĐOẠN VĂN NGẮN (khoảng 3–6 câu, độ dài ~50–120 từ) về một chủ đề quen thuộc (school, family, hobbies, daily routine, weekend, holiday, technology, environment,... tuỳ level).
-      - Ngôn ngữ, từ vựng và ngữ pháp phù hợp trình độ "${grade}", level ${level}, không quá khó.
-      - Đoạn văn phải liền mạch, đầy đủ câu, không phải dạng bullet list.
-      
-      TRẢ VỀ DUY NHẤT một JSON LÀ MỘT MẢNG, ví dụ:
-      
-      [
-        {
-          "content": "Read the following paragraph aloud:\\n\\nLast weekend, I went to the countryside with my family. We visited my grandparents and helped them in the garden. In the evening, we had a big dinner together and told many funny stories.",
-          "answer": "Last weekend, I went to the countryside with my family. We visited my grandparents and helped them in the garden. In the evening, we had a big dinner together and told many funny stories.",
-          "explanation": "Đoạn văn ngắn về chuyến đi cuối tuần, dùng thì quá khứ đơn, phù hợp trình độ trung học cơ sở."
-        }
-      ]
-      
-      QUY ĐỊNH BẮT BUỘC:
-      - content: CHÍNH LÀ đề bài hiển thị cho học sinh, phải bao gồm hướng dẫn đọc + đoạn văn. Gợi ý format:
-        "Read the following paragraph aloud:\\n\\n<đoạn văn tiếng Anh 3–6 câu>"
-      - answer: CHỈ chứa nguyên văn đoạn văn tiếng Anh (không kèm câu hướng dẫn), dùng làm đoạn chuẩn để hệ thống so sánh khi chấm SPEAKING.
-      - explanation: giải thích rất ngắn về chủ đề hoặc cấu trúc ngữ pháp chính (bằng tiếng Việt hoặc tiếng Anh).
-      
-      Không trả về options. Không ghi thêm bất kỳ text nào ngoài JSON mảng.`;
+        Mục tiêu: học sinh ĐỌC TO một đoạn văn ngắn để luyện phát âm, ngữ điệu, độ trôi chảy.
+        
+        YÊU CẦU:
+        - Mỗi phần tử trong mảng JSON là 1 task speaking độc lập.
+        - Mỗi task gồm MỘT ĐOẠN VĂN NGẮN (khoảng 3–6 câu, độ dài ~50–120 từ) về một chủ đề quen thuộc (school, family, hobbies, daily routine, weekend, holiday, technology, environment,... tuỳ level).
+        - Ngôn ngữ, từ vựng và ngữ pháp phù hợp trình độ "${grade}", level ${level}, không quá khó.
+        - Đoạn văn phải liền mạch, đầy đủ câu, không phải dạng bullet list.
+        
+        TRẢ VỀ DUY NHẤT một JSON LÀ MỘT MẢNG, ví dụ:
+        
+        [
+          {
+            "content": "Read the following paragraph aloud:\\n\\nLast weekend, I went to the countryside with my family. We visited my grandparents and helped them in the garden. In the evening, we had a big dinner together and told many funny stories.",
+            "answer": "Last weekend, I went to the countryside with my family. We visited my grandparents and helped them in the garden. In the evening, we had a big dinner together and told many funny stories.",
+            "explanation": "Đoạn văn ngắn về chuyến đi cuối tuần, dùng thì quá khứ đơn, phù hợp trình độ trung học cơ sở."
+          }
+        ]
+        
+        QUY ĐỊNH BẮT BUỘC:
+        - content: CHÍNH LÀ đề bài hiển thị cho học sinh, phải bao gồm hướng dẫn đọc + đoạn văn. Gợi ý format:
+          "Read the following paragraph aloud:\\n\\n<đoạn văn tiếng Anh 3–6 câu>"
+        - answer: CHỈ chứa nguyên văn đoạn văn tiếng Anh (không kèm câu hướng dẫn), dùng làm đoạn chuẩn để hệ thống so sánh khi chấm SPEAKING.
+        - explanation: giải thích rất ngắn về chủ đề hoặc cấu trúc ngữ pháp chính (bằng tiếng Việt hoặc tiếng Anh).
+        
+        Không trả về options. Không ghi thêm bất kỳ text nào ngoài JSON mảng.`;
       }
 
 
@@ -194,64 +194,64 @@ Không trả về options. Không ghi thêm text ngoài JSON.`;
           type === "multiple_choice"
             ? "trắc nghiệm nhiều lựa chọn (4 đáp án A, B, C, D)"
             : type === "true_false"
-            ? "True/False"
-            : "trắc nghiệm";
-      
+              ? "True/False"
+              : "trắc nghiệm";
+
         if (type === "multiple_choice") {
           // multiple_choice: CẤM True/False, bắt buộc có answer và answer thuộc options
           prompt = `Hãy tạo ${amount} câu hỏi trắc nghiệm nhiều lựa chọn (4 đáp án A, B, C, D) tiếng Anh cho học sinh/thí sinh trình độ lớp hoặc kỳ thi "${grade}", cấp độ ${level}, kỹ năng ${skill}.
-      Yêu cầu:
-      - Mỗi câu có đúng 4 đáp án lựa chọn, nội dung là câu trả lời đầy đủ, KHÔNG phải dạng "True/False", "Yes/No".
-      - KHÔNG được dùng các đáp án "True", "False", "Yes", "No" làm toàn bộ nội dung đáp án.
-      - Nội dung và từ vựng phù hợp trình độ.
-      - Mỗi câu CHỈ có 1 đáp án đúng.
-      - Trường "answer" PHẢI trùng khớp đúng với một trong 4 phần tử trong "options".
-      
-      Trả về DUY NHẤT một JSON là một mảng, ví dụ:
-      [
-        {
-          "content": "What time do you usually get up?",
-          "options": [
-            "At seven o'clock.",
-            "In the evening.",
-            "At school.",
-            "Very well."
-          ],
-          "answer": "At seven o'clock.",
-          "explanation": "Đáp án phù hợp câu hỏi về thời gian."
-        }
-      ]
-      
-      Quy định:
-      - content: câu hỏi tiếng Anh.
-      - options: MẢNG 4 đáp án, mỗi phần tử là một chuỗi, KHÔNG được là "True" hoặc "False".
-      - answer: một chuỗi, BẮT BUỘC phải trùng với một phần tử trong "options".
-      - explanation: giải thích ngắn.
-      KHÔNG ghi thêm bất kỳ chữ nào ngoài JSON mảng.`;
+        Yêu cầu:
+        - Mỗi câu có đúng 4 đáp án lựa chọn, nội dung là câu trả lời đầy đủ, KHÔNG phải dạng "True/False", "Yes/No".
+        - KHÔNG được dùng các đáp án "True", "False", "Yes", "No" làm toàn bộ nội dung đáp án.
+        - Nội dung và từ vựng phù hợp trình độ.
+        - Mỗi câu CHỈ có 1 đáp án đúng.
+        - Trường "answer" PHẢI trùng khớp đúng với một trong 4 phần tử trong "options".
+        
+        Trả về DUY NHẤT một JSON là một mảng, ví dụ:
+        [
+          {
+            "content": "What time do you usually get up?",
+            "options": [
+              "At seven o'clock.",
+              "In the evening.",
+              "At school.",
+              "Very well."
+            ],
+            "answer": "At seven o'clock.",
+            "explanation": "Đáp án phù hợp câu hỏi về thời gian."
+          }
+        ]
+        
+        Quy định:
+        - content: câu hỏi tiếng Anh.
+        - options: MẢNG 4 đáp án, mỗi phần tử là một chuỗi, KHÔNG được là "True" hoặc "False".
+        - answer: một chuỗi, BẮT BUỘC phải trùng với một phần tử trong "options".
+        - explanation: giải thích ngắn.
+        KHÔNG ghi thêm bất kỳ chữ nào ngoài JSON mảng.`;
         } else {
           // true_false và các loại khác giữ nguyên logic cũ
           prompt = `Hãy tạo ${amount} câu hỏi ${questionTypeText} tiếng Anh cho học sinh/thí sinh trình độ lớp hoặc kỳ thi "${grade}", cấp độ ${level}, kỹ năng ${skill}.
-      Yêu cầu:
-      - Nội dung và từ vựng phù hợp trình độ.
-      - Nếu là True/False thì answer chỉ là "True" hoặc "False".
-      
-      Trả về DUY NHẤT một JSON là một mảng, ví dụ:
-      [
-        {
-          "content": "Students should do homework every day.",
-          "answer": "True",
-          "explanation": "Câu khẳng định chung về việc học tập."
-        }
-      ]
-      
-      Quy định:
-      - content: câu hỏi tiếng Anh.
-      - answer: đáp án đúng.
-      - explanation: giải thích ngắn.
-      Không ghi thêm text ngoài JSON.`;
+        Yêu cầu:
+        - Nội dung và từ vựng phù hợp trình độ.
+        - Nếu là True/False thì answer chỉ là "True" hoặc "False".
+        
+        Trả về DUY NHẤT một JSON là một mảng, ví dụ:
+        [
+          {
+            "content": "Students should do homework every day.",
+            "answer": "True",
+            "explanation": "Câu khẳng định chung về việc học tập."
+          }
+        ]
+        
+        Quy định:
+        - content: câu hỏi tiếng Anh.
+        - answer: đáp án đúng.
+        - explanation: giải thích ngắn.
+        Không ghi thêm text ngoài JSON.`;
         }
       }
-      
+
 
       // ==== Gọi Ollama thay cho OpenAI ====
       const content = await callOllama(prompt);
@@ -261,6 +261,7 @@ Không trả về options. Không ghi thêm text ngoài JSON.`;
       try {
         // Ưu tiên lấy JSON nằm trong ```json ... ```
         let jsonText = null;
+
         const fenceMatch =
           content.match(/```json([\s\S]*?)```/i) ||
           content.match(/```([\s\S]*?)```/i);
@@ -394,8 +395,78 @@ Không trả về options. Không ghi thêm text ngoài JSON.`;
     }
   }
 );
+// Thử bóc tách điểm từ output dạng markdown, không phải JSON
+function parseMarkdownEvaluation(text, studentText) {
+  // Helper lấy số từ regex
+  const getScore = (regex) => {
+    const m = text.match(regex);
+    if (!m) return null;
+    const numStr = m[1].replace(",", ".").trim();
+    const val = parseFloat(numStr);
+    return Number.isFinite(val) ? val : null;
+  };
+
+  const taskScore = getScore(/\*\*Task response[^\n]*\*\*:?\s*([\d.,]+)/i);
+  const coherenceScore = getScore(/Coherence\s*&\s*cohesion[^\n]*:?\s*([\d.,]+)/i);
+  const vocabScore = getScore(/Vocabulary[^\n]*:?\s*([\d.,]+)/i);
+  const grammarScore = getScore(/Grammar\s*&\s*accuracy[^\n]*:?\s*([\d.,]+)/i);
+  const overallScore =
+    getScore(/\*\*Tổng điểm\*\*:?\s*([\d.,]+)/i) ||
+    getScore(/\*\*OverallScore\*\*:?\s*([\d.,]+)/i);
+
+  // Đoạn văn đã chỉnh sửa nằm giữa 3 dấu ngoặc kép """ ... """
+  let correctedText = "";
+  const correctedMatch = text.match(/"""\s*([\s\S]*?)\s*"""/);
+  if (correctedMatch) {
+    correctedText = correctedMatch[1].trim();
+  }
+
+  // Gợi ý: các dòng bắt đầu bằng "1.", "2.", ...
+  const suggestions = text
+    .split("\n")
+    .filter((line) => /^\s*\d+\.\s+/.test(line))
+    .map((line) => line.replace(/^\s*\d+\.\s+/, "").trim())
+    .filter(Boolean);
+
+  // Ước lượng số từ
+  const baseText = correctedText || studentText || "";
+  const wordCount = baseText
+    .split(/\s+/)
+    .filter((w) => w.trim().length > 0).length;
+
+  // Nếu không có overallScore thì coi như thất bại
+  if (overallScore == null) return null;
+
+  return {
+    overallScore,
+    level: null,
+    wordCount,
+    criteria: {
+      taskResponse: {
+        score: taskScore,
+        comment: "",
+      },
+      coherence: {
+        score: coherenceScore,
+        comment: "",
+      },
+      vocabulary: {
+        score: vocabScore,
+        comment: "",
+      },
+      grammar: {
+        score: grammarScore,
+        comment: "",
+      },
+    },
+    correctedText,
+    suggestions,
+  };
+}
+
 // POST /api/ai/writing-eval
 // Chấm bài viết đoạn văn (writing_paragraph)
+
 router.post(
   "/writing-eval",
   verifyToken,
@@ -420,36 +491,36 @@ router.post(
       const safeLevel = level || "B1";
 
       const prompt = `
-Bạn là giáo viên tiếng Anh, chấm bài viết đoạn văn của học sinh phổ thông Việt Nam.
-
-Thông tin:
-- Lớp/kỳ thi (grade): "${safeGrade}"
-- Cấp độ (level): "${safeLevel}"
-- Đề bài (question): ${question ? `"${question}"` : "(không cung cấp)"}
-- Đoạn văn học sinh viết (studentText):
-
-"""
-${studentText}
-"""
-
-${
-  expectedWords
-    ? `Độ dài mong muốn khoảng ${expectedWords} từ.`
-    : "Độ dài đoạn văn khoảng 80–120 từ là phù hợp."
-}
-
-Hãy ĐÁNH GIÁ đoạn văn theo các tiêu chí sau:
+      Bạn là giáo viên tiếng Anh, chấm bài viết đoạn văn của học sinh phổ thông Việt Nam.
+      
+      Thông tin:
+      - Lớp/kỳ thi (grade): "${safeGrade}"
+      - Cấp độ (level): "${safeLevel}"
+      - Đề bài (question): ${question ? `"${question}"` : "(không cung cấp)"}
+      - Đoạn văn học sinh viết (studentText):
+      
+      """
+      ${studentText}
+      """
+      
+      ${expectedWords
+          ? `Độ dài mong muốn khoảng ${expectedWords} từ.`
+          : "Độ dài đoạn văn khoảng 80–120 từ là phù hợp."
+        }
+  Hãy ĐÁNH GIÁ đoạn văn theo các tiêu chí sau:
 1) Task response (hoàn thành yêu cầu đề bài, đủ ý, đúng chủ đề)
 2) Coherence & cohesion (mạch lạc, logic, liên kết câu/ý)
 3) Vocabulary (từ vựng phù hợp, đa dạng, ít lặp)
 4) Grammar & accuracy (ngữ pháp, chính tả, dấu câu)
 
 YÊU CẦU BẮT BUỘC:
+- Tất cả phần nhận xét, mô tả, comment và suggestions phải viết BẰNG TIẾNG VIỆT.
+- Trường "correctedText" PHẢI LÀ ĐOẠN VĂN TIẾNG ANH đã được chỉnh sửa, không chứa tiếng Việt hay bất kỳ ngôn ngữ nào khác.
+- Không được viết kiểu "Đoạn văn đã được giáo viên chỉnh sửa..." trong "correctedText". "correctedText" phải bắt đầu trực tiếp bằng câu tiếng Anh của đoạn văn.
 - Cho điểm từng tiêu chí theo thang 0–10 (có thể số thập phân, ví dụ 6.5).
 - Cho điểm tổng (overallScore) 0–10.
 - Ước lượng số từ (wordCount).
-- Viết lại đoạn văn đã được chỉnh sửa (correctedText) – giữ nguyên ý chính, chỉ sửa lỗi rõ ràng.
-- Đưa ra 3–6 gợi ý cải thiện cụ thể (suggestions).
+- Đưa ra 3–6 gợi ý cải thiện cụ thể (suggestions) bằng TIẾNG VIỆT.
 
 TRẢ VỀ DUY NHẤT MỘT JSON OBJECT, KHÔNG THÊM BẤT KỲ TEXT NÀO KHÁC, ví dụ:
 
@@ -475,7 +546,7 @@ TRẢ VỀ DUY NHẤT MỘT JSON OBJECT, KHÔNG THÊM BẤT KỲ TEXT NÀO KHÁC
       "comment": "Một số lỗi thì hiện tại đơn/quá khứ đơn và thiếu mạo từ."
     }
   },
-  "correctedText": "Đoạn văn đã được giáo viên chỉnh sửa, giữ nguyên ý nhưng sửa lỗi rõ ràng...",
+  "correctedText": "Every day, I follow a simple routine that helps me stay organized and focused. In the morning, I get up early to prepare for school and review my lessons...",
   "suggestions": [
     "Thêm 1–2 câu kết luận để đoạn văn trọn ý hơn.",
     "Dùng thêm từ nối như 'however', 'therefore' để tăng tính liên kết.",
@@ -487,7 +558,6 @@ TRẢ VỀ DUY NHẤT MỘT JSON OBJECT, KHÔNG THÊM BẤT KỲ TEXT NÀO KHÁC
       // Gọi Ollama
       const content = await callOllama(prompt);
 
-      // Parse JSON từ content
       let jsonText = null;
       const fenceMatch =
         content.match(/```json([\s\S]*?)```/i) ||
@@ -503,17 +573,43 @@ TRẢ VỀ DUY NHẤT MỘT JSON OBJECT, KHÔNG THÊM BẤT KỲ TEXT NÀO KHÁC
         }
       }
 
+      // ❶ Không tìm thấy JSON → thử fallback sang parser markdown
       if (!jsonText) {
         console.warn("Không tìm thấy JSON eval trong content:", content);
+
+        const fallbackEval = parseMarkdownEvaluation(content, studentText);
+        if (fallbackEval) {
+          return res.status(200).json({ evaluation: fallbackEval, raw: content });
+        }
+
         return res.status(200).json({ raw: content });
       }
+
+      // ❷ “Lau chùi” JSON để tránh lỗi parse
+      jsonText = jsonText
+        // bỏ các escape Unicode lạ (IPA, v.v.)
+        .replace(/\\u[0-9a-fA-F]{4}/g, "")
+        // gộp "" thành " (tránh ..., vì,..."" )
+        .replace(/""/g, '"')
+        // bỏ dấu phẩy thừa trước } hoặc ]
+        .replace(/,\s*}/g, "}")
+        .replace(/,\s*]/g, "]");
 
       let parsed;
       try {
         parsed = JSON.parse(jsonText);
       } catch (e) {
         console.error("Parse JSON eval thất bại:", e, jsonText);
-        return res.status(200).json({ raw: content });
+
+        // ❸ JSON vẫn lỗi → fallback sang parser markdown
+        const fallbackEval = parseMarkdownEvaluation(content, studentText);
+        if (fallbackEval) {
+          return res.status(200).json({ evaluation: fallbackEval, raw: content });
+        }
+
+        return res
+          .status(200)
+          .json({ raw: content, error: "JSON_EVAL_PARSE_FAILED" });
       }
 
       // Cho phép model lỡ trả về mảng -> lấy phần tử đầu

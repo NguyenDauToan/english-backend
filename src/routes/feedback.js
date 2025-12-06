@@ -261,5 +261,37 @@ router.get("/mine", verifyToken, verifyRole(["student"]), async (req, res) => {
     return res.status(500).json({ message: err.message });
   }
 });
+// 🔢 Đếm số feedback đang chờ xử lý (pending)
+router.get(
+  "/pending-count",
+  verifyToken,
+  verifyRole(["teacher", "admin", "school_manager"]),
+  async (req, res) => {
+    try {
+      const filter = { status: "pending" };
+
+      if (req.user.role === "teacher") {
+        // giáo viên: chỉ feedback gửi cho mình
+        filter.toTeacher = req.user.id;
+      }
+
+      if (req.user.role === "school_manager") {
+        // school_manager: feedback trong trường mình
+        if (!req.user.school) {
+          return res
+            .status(400)
+            .json({ message: "Tài khoản chưa gắn với trường nào" });
+        }
+        filter.school = req.user.school;
+      }
+
+      const count = await Feedback.countDocuments(filter);
+      return res.json({ count });
+    } catch (err) {
+      console.error("Lỗi đếm feedback pending:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  }
+);
 
 export default router;

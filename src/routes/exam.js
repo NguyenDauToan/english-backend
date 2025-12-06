@@ -1194,5 +1194,40 @@ router.patch(
     }
   }
 );
+// 🔢 Đếm số đề thi đang chờ duyệt
+router.get(
+  "/pending-count",
+  verifyToken,
+  verifyRole(["admin", "school_manager", "teacher"]),
+  async (req, res) => {
+    try {
+      const filter = { status: "pending" };
+
+      if (req.user.role === "school_manager") {
+        // đếm đề pending trong trường mình
+        if (!req.user.school) {
+          return res
+            .status(400)
+            .json({ message: "Tài khoản chưa gắn với trường nào" });
+        }
+        filter.school = req.user.school;
+      }
+
+      if (req.user.role === "teacher") {
+        // giáo viên: số đề mình tạo đang pending
+        filter.createdBy = req.user.id;
+        if (req.user.school) {
+          filter.school = req.user.school;
+        }
+      }
+
+      const count = await Test.countDocuments(filter);
+      return res.json({ count });
+    } catch (err) {
+      console.error("Lỗi đếm bài thi pending:", err);
+      return res.status(500).json({ message: err.message });
+    }
+  }
+);
 
 export default router;
